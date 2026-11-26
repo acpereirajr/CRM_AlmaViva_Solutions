@@ -46,7 +46,7 @@ const MESL=['janeiro','fevereiro','março','abril','maio','junho','julho','agost
 const HIDE_GER=new Set(['Sem gerente','Parcerias']);
 const TODAY=new Date(); const TODAY_ISO=TODAY.toISOString().slice(0,10);
 
-const S:any={listas:null,opps:[],clientes:[],fat:[],metas:{},metasDoc:{},gerCad:[],cfg:'etapas',running:{},readOnly:false,loaded:{o:false,c:false},
+const S:any={areas:new Set(),listas:null,opps:[],clientes:[],fat:[],metas:{},metasDoc:{},gerCad:[],cfg:'etapas',running:{},readOnly:false,loaded:{o:false,c:false},
   sel:new Set(),ano:'2026',p:{cli:'',fab:'',area:'',res:'gp'},sim:{pct:60,ex:false},evFab:'',
   f:{q:'',per:'',ger:'',cli:'',tec:'',tip:'',bu:'',ter:'',st:'',page:0}};
 
@@ -78,11 +78,16 @@ const uniq=a=>[...new Set(a.filter(Boolean))].sort((x,y)=>String(x).localeCompar
 const inativos=()=>new Set(S.gerCad.filter(g=>g.ativo===false).map(g=>g.nome));
 function gerentesTodos(){return uniq([...S.gerCad.map(g=>g.nome),...Object.keys(S.metas),...S.opps.map(o=>o.gerente),...S.fat.map(r=>r.gerente)]).filter(g=>!HIDE_GER.has(g));}
 function gerentes(){const off=inativos();return gerentesTodos().filter(g=>!off.has(g));}
-const inSel=g=>!S.sel.size||S.sel.has(g);
+const areaDe=g=>(S.gerCad.find(x=>x.nome===g)||{}).area||'Sem área';
+const inSel=g=>(!S.sel.size||S.sel.has(g))&&(!S.areas.size||S.areas.has(areaDe(g)));
+const filtrando=()=>S.sel.size>0||S.areas.size>0;
+// gerentes que compõem a visão atual (gerentes e áreas escolhidos no painel)
+const gerSel=()=>uniq([...gerentesTodos(),...Object.keys(S.metas)]).filter(inSel);
+function areasTodas(){const a=opcoes('area_gerente');const usadas=uniq(gerentesTodos().map(areaDe));return [...a.filter(x=>usadas.includes(x)),...usadas.filter(x=>!a.includes(x))];}
 function selOpps(){return S.opps.filter(o=>inSel(o.gerente));}
 function selFat(){return S.fat.filter(r=>inSel(r.gerente));}
-function metaSel(){const k=S.sel.size?[...S.sel]:Object.keys(S.metas);return sum(k,g=>S.metas[g]||0);}
-function runKey(){return (S.sel.size?[...S.sel].sort().join('|'):'todos')+'@'+S.ano;}
+function metaSel(){const k=filtrando()?gerSel():Object.keys(S.metas);return sum(k,g=>S.metas[g]||0);}
+function runKey(){return (filtrando()?gerSel().sort().join('|'):'todos')+'@'+S.ano;}
 function runningVal(){const r=S.running[runKey()];return r?Number(r)||0:0;}
 function base(){
   const Y=S.ano, opps=selOpps(), fat=selFat().filter(r=>r.mes.startsWith(Y));
@@ -136,23 +141,34 @@ function donut(el,items){
 
 /* ================= painel ================= */
 function renderGerSel(){
+  renderAreaSel();
   if(GER_FIXO){$('#msGer').innerHTML=`<button type="button" disabled><span>${esc(GER_FIXO)}</span><span class="cnt">1</span></button>`;$('#gerHint').textContent='Você vê a sua carteira.';return;}
-  const all=gerentes(); const n=S.sel.size;
+  const all=gerentes().filter(g=>!S.areas.size||S.areas.has(areaDe(g))); const n=S.sel.size;
   const lbl=!n?'Todos os gerentes':n===1?[...S.sel][0]:`${n} gerentes`;
   const box=$('#msGer'); const open=box.querySelector('.ms-pop')&&!box.querySelector('.ms-pop').hidden;
   box.innerHTML=`<button type="button" aria-haspopup="true" aria-expanded="${open}"><span>${esc(lbl)}</span><span class="cnt">${n||all.length}</span></button>
     <div class="ms-pop" ${open?'':'hidden'}>${all.map(g=>`<label><input type="checkbox" value="${esc(g)}" ${S.sel.has(g)?'checked':''}>${esc(g)}${S.metas[g]?` <span class="note">· meta ${esc(M(S.metas[g]))}</span>`:''}</label>`).join('')}</div>`;
-  $('#gerHint').textContent=`${n||all.length} de ${all.length} gerentes compõem os números atuais.`;
+  const k=gerSel().filter(g=>!HIDE_GER.has(g)).length;
+  $('#gerHint').textContent=`${k} gerente${k===1?'':'s'} compõe${k===1?'':'m'} os números atuais.`;
 }
-document.addEventListener('click',e=>{const box=$('#msGer');
-  if(box.contains(e.target)){ if(e.target.closest('button')){const p=box.querySelector('.ms-pop');p.hidden=!p.hidden;box.querySelector('button').setAttribute('aria-expanded',!p.hidden);} return;}
-  const p=box.querySelector('.ms-pop'); if(p&&!p.hidden){p.hidden=true;}
+function renderAreaSel(){
+  const f=$('#fAreaBox'); if(GER_FIXO){f.hidden=true;return;} f.hidden=false;
+  const all=areasTodas(),n=S.areas.size,box=$('#msArea');const open=box.querySelector('.ms-pop')&&!box.querySelector('.ms-pop').hidden;
+  const lbl=!n?'Todas as áreas':n===1?[...S.areas][0]:`${n} áreas`;
+  box.innerHTML=`<button type="button" aria-haspopup="true" aria-expanded="${open}"><span>${esc(lbl)}</span><span class="cnt">${n||all.length}</span></button>
+    <div class="ms-pop" ${open?'':'hidden'}>${all.map(a=>`<label><input type="checkbox" value="${esc(a)}" ${S.areas.has(a)?'checked':''}>${esc(a)} <span class="note">· ${gerentes().filter(g=>areaDe(g)===a).length} gerentes</span></label>`).join('')}</div>`;
+}
+$('#msArea').addEventListener('change',e=>{if(GER_FIXO)return;const v=e.target.value;if(e.target.checked)S.areas.add(v);else S.areas.delete(v);
+  [...S.sel].forEach(g=>{if(S.areas.size&&!S.areas.has(areaDe(g)))S.sel.delete(g);});renderAll();});
+document.addEventListener('click',e=>{['#msGer','#msArea'].forEach(id=>{const box=$(id);
+  if(box.contains(e.target)){ if(e.target.closest('button')){const p=box.querySelector('.ms-pop');if(!p)return;p.hidden=!p.hidden;box.querySelector('button').setAttribute('aria-expanded',!p.hidden);} return;}
+  const p=box.querySelector('.ms-pop'); if(p&&!p.hidden){p.hidden=true;}});
 });
 $('#msGer').addEventListener('change',e=>{if(GER_FIXO)return;const v=e.target.value;if(e.target.checked)S.sel.add(v);else S.sel.delete(v);renderAll();});
 
 function renderHero(b){
-  const one=S.sel.size===1?[...S.sel][0]:null;
-  $('#hName').textContent=one||(S.sel.size?`${S.sel.size} gerentes selecionados`:'Comercial Almaviva');
+  const gsv=filtrando()?gerSel():[];const one=gsv.length===1?gsv[0]:null;
+  $('#hName').textContent=one||(S.areas.size&&!S.sel.size?[...S.areas].join(', '):filtrando()?`${gsv.length} gerentes selecionados`:'Comercial Almaviva');
   $('#hLead').textContent=one?'Faturamento, pipeline e desempenho individual':'Faturamento, pipeline e desempenho da equipe comercial';
   $('#hPill').textContent=`Ano de ${b.Y} · Meta ${b.meta?M(b.meta):'não definida'}`;
   $('#hReal').textContent=M(b.real);$('#hFc').textContent=M(b.fc);$('#hProj').textContent=M(b.proj);
@@ -198,7 +214,7 @@ function renderInsights(b){
 }
 
 function renderGerBars(b){
-  const gs=(S.sel.size?[...S.sel]:gerentes());
+  const gs=(filtrando()?gerSel():gerentes());
   const rows=gs.map(g=>({g,real:sum(b.fat.filter(r=>r.gerente===g),r=>r.valor),fc:sum(b.fcOpps.filter(o=>o.gerente===g),vAno),meta:S.metas[g]||0}));
   const r1=rows.filter(r=>r.real).sort((a,c)=>c.real-a.real);
   hbars($('#barReal'),r1.map(r=>({l:r.g,v:r.real})));
@@ -319,7 +335,7 @@ function renderIntel(b){
   if(q4>.7&&curQ<3)al.push(['','Dependência elevada do Q4',`${nf(q4*100,0)}% do forecast está previsto para o quarto trimestre.`]);
   if(q4>.7&&curQ===3)al.push(['','Forecast concentrado no trimestre atual',`${nf(q4*100,0)}% do forecast fecha até dezembro. O tempo para converter é curto.`]);
   if(semData.length)al.push(['','Oportunidades sem data de fechamento',`${semData.length} oportunidade(s) em aberto sem data prevista.`]);
-  const gsM=(S.sel.size?[...S.sel]:Object.keys(S.metas)).filter(g=>S.metas[g]);
+  const gsM=(filtrando()?gerSel():Object.keys(S.metas)).filter(g=>S.metas[g]);
   const risk=gsM.filter(g=>{const r=sum(b.fat.filter(x=>x.gerente===g),x=>x.valor),f=sum(b.fcOpps.filter(o=>o.gerente===g),vAno);return r+f+runFor(g)<S.metas[g];});
   if(risk.length)al.push(['crit','Gerentes abaixo da meta mesmo com 100% do forecast e Running',risk.join(', ')]);
   $('#alCount').textContent=al.length;
@@ -376,8 +392,11 @@ function renderPainel(){
 
 /* ================= oportunidades ================= */
 function renderOpps(){
-  const g=$('#fGerO').value, q=$('#qOpp').value.trim().toLowerCase(), st=$('#fStatus').value;
-  let a=S.opps.filter(o=>(!g||o.gerente===g)&&(st==='abertas'?OPEN.has(o.status):st==='ganhas'?o.status===WON:true));
+  const q=$('#qOpp').value.trim().toLowerCase(), st=$('#fStatus').value;
+  const gsv=filtrando()?gerSel():[];
+  $('#oppVisao').innerHTML=GER_FIXO?`Sua carteira: <b>${esc(GER_FIXO)}</b>`:!filtrando()?'Mostrando <b>todos os gerentes</b>. Para filtrar, escolha gerentes ou áreas no <a href="#painel">Painel</a>.':
+    `Mostrando ${S.areas.size?`áreas <b>${esc([...S.areas].join(', '))}</b>, `:''}${gsv.length===1?'gerente':`${gsv.length} gerentes`} <b>${esc(gsv.length<=4?gsv.join(', '):gsv.slice(0,4).join(', ')+'…')}</b>. Escolha outros no <a href="#painel">Painel</a>.`;
+  let a=S.opps.filter(o=>inSel(o.gerente)&&(st==='abertas'?OPEN.has(o.status):st==='ganhas'?o.status===WON:true));
   if(q)a=a.filter(o=>[o.cliente,o.titulo,o.numero,o.software,o.parceiro,o.gerente].join(' ').toLowerCase().includes(q));
   a=[...a].sort((x,y)=>(x.fechamento||'9').localeCompare(y.fechamento||'9'));
   $('#oppCount').textContent=`${a.length} oportunidades · total ${M(sum(a,o=>o.valorTotal))} · no ano ${M(sum(a,vAno))}`;
@@ -579,25 +598,25 @@ $('#listasGrid').addEventListener('submit',e=>{e.preventDefault();if(!ADMIN)retu
   it.push({v,ativo:true});gravarLista(id,it);});
 async function salvarLista(id,itens){await api.salvarLista(id,itens);}
 /* ================= roteamento ================= */
-const VIEWS=GER_FIXO?['painel','oportunidades','clientes','faturamento']:['painel','oportunidades','clientes','faturamento','config'];
-if(GER_FIXO)document.querySelector('#nav a[href="#config"]')?.remove();
+const VIEWS=ADMIN?['painel','oportunidades','clientes','faturamento','config']:['painel','oportunidades','clientes','faturamento'];
+if(!ADMIN)document.querySelector('#nav a[href="#config"]')?.remove();
 const cur=()=>{const h=location.hash.slice(1);return VIEWS.includes(h)?h:'painel';};
 function renderAll(){
   const v=cur(); VIEWS.forEach(n=>{$('#v-'+n).hidden=n!==v;}); $('#hero').hidden=v!=='painel';
   document.querySelectorAll('#nav a').forEach(a=>{if(a.getAttribute('href')==='#'+v)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});
-  const gl=gerentes(); ['#fGerO','#fGerC'].forEach(id=>{const c=$(id).value;$(id).innerHTML=opts(gl,c,'Todos os gerentes');});
+  const gl=gerentes(); ['#fGerC'].forEach(id=>{const c=$(id).value;$(id).innerHTML=opts(gl,c,'Todos os gerentes');});
   ({painel:renderPainel,oportunidades:renderOpps,clientes:renderClientes,faturamento:renderFat,config:renderConfig})[v]();
 }
 window.addEventListener('hashchange',()=>{renderAll();window.scrollTo(0,0);});
 $('#fAno').addEventListener('change',e=>{S.ano=e.target.value;S.metaDirty=false;renderAll();recarregar('metas');});
-$('#btnLimpar').addEventListener('click',()=>{S.sel.clear();if(GER_FIXO)S.sel.add(GER_FIXO);S.ano='2026';$('#fAno').value='2026';S.p={cli:'',fab:'',area:'',res:'gp'};renderAll();});
+$('#btnLimpar').addEventListener('click',()=>{S.sel.clear();S.areas.clear();if(GER_FIXO)S.sel.add(GER_FIXO);S.ano='2026';$('#fAno').value='2026';S.p={cli:'',fab:'',area:'',res:'gp'};renderAll();});
 [['#pCli','cli'],['#pFab','fab'],['#pArea','area'],['#pRes','res']].forEach(([id,k])=>$(id).addEventListener('change',e=>{S.p[k]=e.target.value;renderPipeline(base());}));
 $('#btnLimparP').addEventListener('click',()=>{S.p={cli:'',fab:'',area:'',res:'gp'};renderPipeline(base());});
 $('#simR').addEventListener('input',e=>{S.sim.pct=+e.target.value;renderSim(base());});
 $('#simPresets').addEventListener('click',e=>{const x=e.target.closest('button');if(!x)return;S.sim.pct=+x.dataset.p;renderSim(base());});
 $('#simEx').addEventListener('change',e=>{S.sim.ex=e.target.checked;renderSim(base());});
 $('#evFab').addEventListener('change',e=>{S.evFab=e.target.value;renderEvol(base());});
-$('#qOpp').addEventListener('input',renderOpps);$('#fStatus').addEventListener('change',renderOpps);$('#fGerO').addEventListener('change',renderOpps);
+$('#qOpp').addEventListener('input',renderOpps);$('#fStatus').addEventListener('change',renderOpps);
 $('#qCli').addEventListener('input',renderClientes);$('#fGerC').addEventListener('change',renderClientes);
 let rT;window.addEventListener('resize',()=>{clearTimeout(rT);rT=setTimeout(()=>{if(cur()==='painel')renderHero(base());},200);});
 

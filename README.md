@@ -10,15 +10,15 @@ CRM da área Comercial. Os gerentes cadastram oportunidades e clientes, e a dire
 
 | Perfil | Oportunidades e clientes | Faturamento | Painel |
 |---|---|---|---|
-| `gerente` | só a própria carteira (lê e edita) | só o próprio | travado no próprio nome |
-| `diretor` | todas (lê e edita) | todo | escolhe qualquer combinação de gerentes |
-| `admin` | todas, e pode apagar | todo | idem, e altera as Configurações |
+| `gerente` | só a própria carteira (lê e edita) | só o próprio | travado no próprio nome, sem escolher outro gerente |
+| `diretor` | todas (lê e edita) | todo | escolhe uma ou várias áreas e um ou vários gerentes |
+| `admin` | todas, e pode apagar | todo | idem, e é o único que vê e altera as Configurações |
 
-As regras ficam no banco (RLS). Mesmo quem chamar a API direto não vê a carteira de outro gerente.
+A lista de oportunidades segue a seleção de áreas e gerentes do painel. As regras ficam no banco (RLS). Mesmo quem chamar a API direto não vê a carteira de outro gerente.
 
 ## Configurações (aba do app)
 
-Diretores veem a aba; só administradores alteram. Gerentes não veem.
+Só administradores veem e alteram esta aba.
 
 - **Etapas das oportunidades:** nome, ordem, tipo (Em aberto, Ganha, Perdida), probabilidade padrão e se está ativa. "Em aberto" entra no forecast, a única etapa "Ganha" entra no pipeline ganho. Uma etapa em uso não pode ser renomeada nem excluída, só desativada.
 - **Gerentes de negócios:** e-mail, área, território, meta do ano e situação. Gerentes inativos saem da seleção do painel e dos formulários.
