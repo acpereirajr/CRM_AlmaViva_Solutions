@@ -14,6 +14,7 @@ async function aoEntrar(userId: string) {
   if (iniciado) return;
   const perfil = await api.perfil(userId).catch(() => null);
   if (!perfil) { await api.sair(); mostrarLogin('Seu usuário ainda não tem perfil no CRM. Peça para a administração cadastrar.'); return; }
+  if (perfil.ativo === false) { await api.sair(); mostrarLogin('Seu acesso ao CRM está bloqueado. Fale com a administração.'); return; }
   iniciado = true; login.hidden = true; app.hidden = false;
   iniciarApp(perfil, userId);
 }

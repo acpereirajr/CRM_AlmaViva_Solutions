@@ -46,13 +46,46 @@ const MESL=['janeiro','fevereiro','março','abril','maio','junho','julho','agost
 const HIDE_GER=new Set(['Sem gerente','Parcerias']);
 const TODAY=new Date(); const TODAY_ISO=TODAY.toISOString().slice(0,10);
 
-const S:any={areas:new Set(),listas:null,opps:[],clientes:[],fat:[],metas:{},metasDoc:{},gerCad:[],cfg:'etapas',running:{},readOnly:false,loaded:{o:false,c:false},
+const S:any={papeis:null,usuarios:[],areas:new Set(),listas:null,opps:[],clientes:[],fat:[],metas:{},metasDoc:{},gerCad:[],cfg:'etapas',running:{},readOnly:false,loaded:{o:false,c:false},
   sel:new Set(),ano:'2026',p:{cli:'',fab:'',area:'',res:'gp'},sim:{pct:60,ex:false},evFab:'',
   f:{q:'',per:'',ger:'',cli:'',tec:'',tip:'',bu:'',ter:'',st:'',page:0}};
 
-const GER_FIXO=perfil.papel==='gerente'?perfil.gerente:null;
-const ADMIN=perfil.papel==='admin';
-if(GER_FIXO)S.sel.add(GER_FIXO);
+/* ================= acessos ================= */
+// Permissões de cada tipo de usuário. Configurações > Usuários e acessos edita os tipos e as exceções por usuário.
+const PERMS=[
+  {k:'ver_painel',l:'Ver o Painel',g:'Telas'},{k:'ver_oportunidades',l:'Ver Oportunidades',g:'Telas'},
+  {k:'ver_clientes',l:'Ver Clientes',g:'Telas'},{k:'ver_faturamento',l:'Ver Faturamento',g:'Telas'},
+  {k:'configurar',l:'Acessar Configurações (tudo, inclusive usuários)',g:'Telas'},
+  {k:'criar_oportunidades',l:'Cadastrar oportunidades',g:'Ações'},{k:'editar_oportunidades',l:'Editar oportunidades',g:'Ações'},
+  {k:'editar_clientes',l:'Cadastrar e editar clientes',g:'Ações'},{k:'editar_running',l:'Alterar o Running previsto',g:'Ações'}];
+const ESCOPOS={proprio:'Só a própria carteira',area:'Gerentes das suas áreas',todos:'Todos os gerentes'};
+const TUDO=Object.fromEntries(PERMS.map(x=>[x.k,true]));
+const PAPEIS_PADRAO={
+  admin:{nome:'Administrador',escopo:'todos',permissoes:{...TUDO}},
+  diretor:{nome:'Diretor',escopo:'todos',permissoes:{...TUDO,configurar:false}},
+  gerente:{nome:'Gerente',escopo:'proprio',permissoes:{...TUDO,configurar:false}}};
+const TODAS_VIEWS=['painel','oportunidades','clientes','faturamento','config'];
+let VIEWS=[...TODAS_VIEWS], ACESSO={escopo:'todos',permissoes:{...TUDO},gerente:null,areas:[]}, GER_FIXO=null, ADMIN=false;
+const pode=k=>!!ACESSO.permissoes[k];
+const papeisAtuais=()=>S.papeis||PAPEIS_PADRAO;
+function calcAcesso(u){
+  const t=papeisAtuais()[u.papel]||{escopo:'proprio',permissoes:{}};
+  const perm={}; PERMS.forEach(x=>{const o=(u.permissoes||{})[x.k];perm[x.k]=(o===true||o===false)?o:!!t.permissoes[x.k];});
+  if(u.papel==='admin')perm.configurar=true; // o administrador nunca fica trancado fora das Configurações
+  if(u.ativo===false)PERMS.forEach(x=>{perm[x.k]=false;});
+  return {escopo:u.escopo||t.escopo||'proprio',permissoes:perm,gerente:u.gerente||null,areas:u.areas||[]};
+}
+function aplicarAcesso(){
+  ACESSO=calcAcesso(usuarioAtual());
+  GER_FIXO=ACESSO.escopo==='proprio'?(ACESSO.gerente||'(sem gerente vinculado)'):null;
+  ADMIN=pode('configurar');
+  if(GER_FIXO){S.sel=new Set([GER_FIXO]);S.areas.clear();}
+  VIEWS=TODAS_VIEWS.filter(v=>pode(v==='config'?'configurar':'ver_'+v));
+  document.querySelectorAll('#nav a').forEach(a=>{a.hidden=!VIEWS.includes(a.getAttribute('href').slice(1));});
+  $('#btnNovaOpp').hidden=!pode('criar_oportunidades'); $('#btnNovoCli').hidden=!pode('editar_clientes');
+}
+const visivel=g=>ACESSO.escopo==='todos'||g===ACESSO.gerente||(ACESSO.escopo==='area'&&ACESSO.areas.includes(areaDe(g)));
+const usuarioAtual=()=>({...perfil,id:perfil.user_id});
 /* ================= utilidades ================= */
 const $=(s:string):any=>document.querySelector(s);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -76,17 +109,18 @@ const uniq=a=>[...new Set(a.filter(Boolean))].sort((x,y)=>String(x).localeCompar
 
 /* ================= recortes ================= */
 const inativos=()=>new Set(S.gerCad.filter(g=>g.ativo===false).map(g=>g.nome));
-function gerentesTodos(){return uniq([...S.gerCad.map(g=>g.nome),...Object.keys(S.metas),...S.opps.map(o=>o.gerente),...S.fat.map(r=>r.gerente)]).filter(g=>!HIDE_GER.has(g));}
+function gerentesTodosSemFiltro(){return uniq([...S.gerCad.map(g=>g.nome),...Object.keys(S.metas),...S.opps.map(o=>o.gerente),...S.fat.map(r=>r.gerente)]).filter(g=>!HIDE_GER.has(g));}
+function gerentesTodos(){return gerentesTodosSemFiltro().filter(visivel);}
 function gerentes(){const off=inativos();return gerentesTodos().filter(g=>!off.has(g));}
 const areaDe=g=>(S.gerCad.find(x=>x.nome===g)||{}).area||'Sem área';
-const inSel=g=>(!S.sel.size||S.sel.has(g))&&(!S.areas.size||S.areas.has(areaDe(g)));
+const inSel=g=>visivel(g)&&(!S.sel.size||S.sel.has(g))&&(!S.areas.size||S.areas.has(areaDe(g)));
 const filtrando=()=>S.sel.size>0||S.areas.size>0;
 // gerentes que compõem a visão atual (gerentes e áreas escolhidos no painel)
-const gerSel=()=>uniq([...gerentesTodos(),...Object.keys(S.metas)]).filter(inSel);
+const gerSel=()=>uniq([...gerentesTodosSemFiltro(),...Object.keys(S.metas)]).filter(inSel);
 function areasTodas(){const a=opcoes('area_gerente');const usadas=uniq(gerentesTodos().map(areaDe));return [...a.filter(x=>usadas.includes(x)),...usadas.filter(x=>!a.includes(x))];}
 function selOpps(){return S.opps.filter(o=>inSel(o.gerente));}
 function selFat(){return S.fat.filter(r=>inSel(r.gerente));}
-function metaSel(){const k=filtrando()?gerSel():Object.keys(S.metas);return sum(k,g=>S.metas[g]||0);}
+function metaSel(){const k=filtrando()?gerSel():Object.keys(S.metas).filter(visivel);return sum(k,g=>S.metas[g]||0);}
 function runKey(){return (filtrando()?gerSel().sort().join('|'):'todos')+'@'+S.ano;}
 function runningVal(){const r=S.running[runKey()];return r?Number(r)||0:0;}
 function base(){
@@ -188,11 +222,12 @@ function renderMeta(b){
    <div class="kpi" ${w(b.run)}><span class="l">Running previsto</span>
      <div style="display:flex;gap:6px;align-items:center"><b style="color:var(--c1)">R$</b><input id="runIn" inputmode="decimal" value="${esc(nf(b.run,2))}" aria-label="Running previsto em reais"></div>
      <span class="s" id="runMsg">${S.running[runKey()]!=null?'valor salvo para esta seleção':'receita recorrente esperada até o fim do ano'}</span>
-     <button class="blue" id="runBtn" style="padding:6px 10px" ${S.readOnly?'disabled':''}>Aplicar à projeção</button></div>
+     <button class="blue" id="runBtn" style="padding:6px 10px" ${S.readOnly||!pode('editar_running')?'disabled':''}>Aplicar à projeção</button></div>
    <div class="kpi" ${w(b.proj)}><span class="l">Projeção combinada</span><span class="v num">${esc(M(b.proj))}</span><span class="s">${b.meta?(b.proj>=b.meta?'superaria em '+M(b.proj-b.meta):'faltariam '+M(b.meta-b.proj)):'realizado + forecast + running'}</span></div>`;
   $('#runBtn').addEventListener('click',saveRunning);
 }
 async function saveRunning(){
+  if(!pode('editar_running'))return;
   const raw=$('#runIn').value.replace(/\./g,'').replace(',','.').replace(/[^\d.]/g,''); const v=Math.max(0,Number(raw)||0);
   try{ const key=runKey(); const next={...S.running,[key]:v}; await api.salvarRunning(key,v,userId); S.running=next; renderAll(); toast('Running previsto aplicado à projeção'); }
   catch(e){ $('#runMsg').textContent=semPermissao(e)?'Você não tem permissão para alterar este valor.':'Não foi possível salvar agora.'; }
@@ -335,7 +370,7 @@ function renderIntel(b){
   if(q4>.7&&curQ<3)al.push(['','Dependência elevada do Q4',`${nf(q4*100,0)}% do forecast está previsto para o quarto trimestre.`]);
   if(q4>.7&&curQ===3)al.push(['','Forecast concentrado no trimestre atual',`${nf(q4*100,0)}% do forecast fecha até dezembro. O tempo para converter é curto.`]);
   if(semData.length)al.push(['','Oportunidades sem data de fechamento',`${semData.length} oportunidade(s) em aberto sem data prevista.`]);
-  const gsM=(filtrando()?gerSel():Object.keys(S.metas)).filter(g=>S.metas[g]);
+  const gsM=(filtrando()?gerSel():Object.keys(S.metas).filter(visivel)).filter(g=>S.metas[g]);
   const risk=gsM.filter(g=>{const r=sum(b.fat.filter(x=>x.gerente===g),x=>x.valor),f=sum(b.fcOpps.filter(o=>o.gerente===g),vAno);return r+f+runFor(g)<S.metas[g];});
   if(risk.length)al.push(['crit','Gerentes abaixo da meta mesmo com 100% do forecast e Running',risk.join(', ')]);
   $('#alCount').textContent=al.length;
@@ -458,9 +493,9 @@ $('#fPrev').addEventListener('click',()=>{S.f.page--;renderFat();});$('#fNext').
 /* ================= configurações ================= */
 function renderConfig(){
   document.querySelectorAll('#cfgTabs button').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.cfg===S.cfg)));
-  ['etapas','gerentes','metas','listas'].forEach(k=>{$('#cfg-'+k).hidden=k!==S.cfg;});
+  ['etapas','gerentes','metas','listas','acessos'].forEach(k=>{$('#cfg-'+k).hidden=k!==S.cfg;});
   const ro=!ADMIN; ['#btnNovaEtapa','#btnNovoGer','#m_save'].forEach(s=>$(s).disabled=ro);
-  ({etapas:renderEtapas,gerentes:renderGerCad,metas:renderMetasCfg,listas:renderListas})[S.cfg]();
+  ({etapas:renderEtapas,gerentes:renderGerCad,metas:renderMetasCfg,listas:renderListas,acessos:renderAcessos})[S.cfg]();
 }
 $('#cfgTabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.cfg=b.dataset.cfg;renderConfig();});
 const usoEtapa=k=>S.opps.filter(o=>o.status===k).length;
@@ -597,12 +632,82 @@ $('#listasGrid').addEventListener('submit',e=>{e.preventDefault();if(!ADMIN)retu
   if(it.some(i=>i.v.toLowerCase()===v.toLowerCase())){toast('Essa opção já existe na lista.');return;}
   it.push({v,ativo:true});gravarLista(id,it);});
 async function salvarLista(id,itens){await api.salvarLista(id,itens);}
+
+/* ---- usuários e acessos ---- */
+const usoPapel=k=>S.usuarios.filter(u=>u.papel===k).length;
+function renderAcessos(){
+  const P=papeisAtuais(),ks=Object.keys(P),ro=!ADMIN;
+  const grupos=[...new Set(PERMS.map(x=>x.g))];
+  $('#tbPapeis').innerHTML=`<thead><tr><th>Permissão</th>${ks.map(k=>`<th class="c">${esc(P[k].nome)}${['admin','diretor','gerente'].includes(k)||usoPapel(k)?'':` <button class="ico" data-delpapel="${esc(k)}" aria-label="Excluir tipo" ${ro?'disabled':''}>✕</button>`}<div class="note">${nf(usoPapel(k))} usuário${usoPapel(k)===1?'':'s'}</div></th>`).join('')}</tr></thead><tbody>
+    <tr><td class="w"><b>Carteira que enxerga</b><div class="note">Quais gerentes aparecem no painel e nas listas</div></td>${ks.map(k=>`<td class="c"><select data-esc="${esc(k)}" ${ro?'disabled':''}>${Object.entries(ESCOPOS).map(([v,l])=>`<option value="${v}" ${P[k].escopo===v?'selected':''}>${l}</option>`).join('')}</select></td>`).join('')}</tr>
+    ${grupos.map(g=>`<tr class="grp"><td colspan="${ks.length+1}">${esc(g)}</td></tr>`+PERMS.filter(x=>x.g===g).map(x=>`<tr><td class="w">${esc(x.l)}</td>${ks.map(k=>{const trava=k==='admin'&&x.k==='configurar';
+      return `<td class="c"><input type="checkbox" data-perm="${esc(k)}|${x.k}" ${P[k].permissoes[x.k]?'checked':''} ${ro||trava?'disabled':''} ${trava?'title="O administrador sempre acessa as Configurações"':''}></td>`;}).join('')}</tr>`).join('')).join('')}</tbody>`;
+  const usuarios=[...S.usuarios].sort((a,b)=>(a.ativo===false)-(b.ativo===false)||String(a.nome).localeCompare(String(b.nome),'pt'));
+  $('#tbUsuarios').innerHTML=`<thead><tr><th>Usuário</th><th>E-mail</th><th>Tipo</th><th>Gerente vinculado</th><th>Áreas</th><th>Carteira</th><th class="r">Exceções</th><th>Situação</th><th></th></tr></thead><tbody>${
+    usuarios.map(u=>{const a=calcAcesso(u),ex=Object.keys(u.permissoes||{}).length+(u.escopo?1:0);
+      return `<tr><td class="w"><b>${esc(u.nome)}</b></td><td>${esc(u.email||'—')}</td><td>${esc((P[u.papel]||{}).nome||u.papel)}</td><td>${esc(u.gerente||'—')}</td><td>${esc((u.areas||[]).join(', ')||'—')}</td>
+      <td>${esc(ESCOPOS[a.escopo])}</td><td class="r">${ex?nf(ex):'—'}</td><td>${u.ativo===false?'<span class="tag off">Inativo</span>':u.pendente?'<span class="tag">Aguardando 1º acesso</span>':'Ativo'}</td>
+      <td><button class="ico" data-usr="${esc(u.id)}">Editar</button></td></tr>`;}).join('')||`<tr><td colspan="9" class="note">Nenhum usuário cadastrado ainda. Use "Novo usuário".</td></tr>`}</tbody>`;
+  ['#btnNovoTipo','#btnNovoUsr'].forEach(s=>$(s).disabled=ro);
+}
+async function gravarPapeis(P){S.papeis=P;renderAcessos();try{await salvarPapeis(P);}catch(err){toast('Não foi possível salvar os tipos de usuário.');}}
+$('#tbPapeis').addEventListener('change',e=>{if(!ADMIN)return;const P=JSON.parse(JSON.stringify(papeisAtuais()));
+  const c=e.target.closest('[data-perm]'),s=e.target.closest('[data-esc]');
+  if(c){const [k,perm]=c.dataset.perm.split('|');P[k].permissoes[perm]=c.checked;if(k==='admin')P.admin.permissoes.configurar=true;}
+  if(s)P[s.dataset.esc].escopo=s.value;
+  gravarPapeis(P);});
+$('#tbPapeis').addEventListener('click',e=>{const b=e.target.closest('[data-delpapel]');if(!b||!ADMIN)return;const P=JSON.parse(JSON.stringify(papeisAtuais()));delete P[b.dataset.delpapel];gravarPapeis(P);});
+$('#btnNovoTipo').addEventListener('click',()=>{if(!ADMIN)return;
+  openDrawer(`<div class="card-head" style="margin:0"><h2 style="font-size:22px">Novo tipo de usuário</h2><button class="ghost" data-close>Fechar</button></div>
+    <form class="form" id="tpF"><label class="full">Nome<input id="t_nome" required placeholder="Ex.: Pré-vendas, Financeiro"></label>
+    <label class="full">Começar com as permissões de<select id="t_base">${Object.entries(papeisAtuais()).map(([k,t])=>`<option value="${esc(k)}" ${k==='gerente'?'selected':''}>${esc(t.nome)}</option>`).join('')}</select></label>
+    <div class="full err" id="t_err"></div><div class="full actions"><button type="button" class="ghost" data-close>Cancelar</button><button class="blue">Criar</button></div></form>`,()=>{
+    $('#tpF').addEventListener('submit',ev=>{ev.preventDefault();const nome=$('#t_nome').value.trim(),k=slug(nome).replace(/-/g,'_');const P=JSON.parse(JSON.stringify(papeisAtuais()));
+      if(!k||P[k]){$('#t_err').textContent='Já existe um tipo com esse nome.';return;}
+      const b=P[$('#t_base').value];P[k]={nome,escopo:b.escopo,permissoes:{...b.permissoes,configurar:false}};closeDrawer();gravarPapeis(P);toast('Tipo criado');});});});
+$('#tbUsuarios').addEventListener('click',e=>{const b=e.target.closest('[data-usr]');if(b)usuarioForm(S.usuarios.find(u=>u.id===b.dataset.usr));});
+$('#btnNovoUsr').addEventListener('click',()=>usuarioForm(null));
+function usuarioForm(u){
+  const isNew=!u; u=u||{nome:'',email:'',papel:'gerente',gerente:'',areas:[],permissoes:{},ativo:true};
+  const P=papeisAtuais(),areas=opcoes('area_gerente'),gs=gerentesTodosSemFiltro();
+  const tri=(k)=>{const o=(u.permissoes||{})[k];return `<select data-tri="${k}"><option value="" ${o!==true&&o!==false?'selected':''}>Igual ao tipo</option><option value="1" ${o===true?'selected':''}>Permitir</option><option value="0" ${o===false?'selected':''}>Bloquear</option></select>`;};
+  openDrawer(`<div class="card-head" style="margin:0"><h2 style="font-size:22px">${isNew?'Novo usuário':esc(u.nome)}</h2><button class="ghost" data-close>Fechar</button></div>
+    <form class="form" id="uF">
+      <label class="full">Nome<input id="u_nome" required value="${esc(u.nome)}"></label>
+      <label class="full">E-mail de acesso<input id="u_email" type="email" required value="${esc(u.email||'')}" ${!isNew&&u.user_id?'readonly':''}></label>
+      <label>Tipo de usuário<select id="u_papel">${Object.entries(P).map(([k,t])=>`<option value="${esc(k)}" ${u.papel===k?'selected':''}>${esc(t.nome)}</option>`).join('')}</select></label>
+      <label>Gerente vinculado<select id="u_ger"><option value=""></option>${opts(gs,u.gerente||'')}</select></label>
+      <div class="full"><span class="note">Áreas (usadas quando a carteira é "Gerentes das suas áreas")</span><div class="chips">${areas.map(a=>`<label class="chip"><input type="checkbox" data-uarea value="${esc(a)}" ${(u.areas||[]).includes(a)?'checked':''}> ${esc(a)}</label>`).join('')}</div></div>
+      <label class="full">Carteira que enxerga<select id="u_esc"><option value="">Igual ao tipo</option>${Object.entries(ESCOPOS).map(([v,l])=>`<option value="${v}" ${u.escopo===v?'selected':''}>${l}</option>`).join('')}</select></label>
+      <div class="full"><h3 style="margin:6px 0">Exceções para este usuário</h3><div class="note" id="u_tipoTxt"></div>
+        <table class="perm-tab"><tbody>${PERMS.map(x=>`<tr><td class="w">${esc(x.l)}</td><td class="note" data-padrao="${x.k}"></td><td>${tri(x.k)}</td></tr>`).join('')}</tbody></table></div>
+      <label class="full" style="display:flex;gap:8px;align-items:center;flex-direction:row"><input type="checkbox" id="u_ativo" ${u.ativo!==false?'checked':''} style="width:auto"> Ativo (desmarque para bloquear o acesso)</label>
+      ${isNew||u.pendente?'<div class="full note">A pessoa entra no app com este e-mail, pelo link de acesso enviado por e-mail. O acesso é liberado no primeiro login.</div>':''}
+      <div class="full err" id="u_err"></div>
+      <div class="full actions"><button type="button" class="ghost" data-close>Cancelar</button><button class="blue" ${ADMIN?'':'disabled'}>${isNew?'Cadastrar':'Salvar'}</button></div>
+    </form>`,()=>{
+      const pad=()=>{const t=P[$('#u_papel').value]||{permissoes:{}};document.querySelectorAll('[data-padrao]').forEach(td=>{td.textContent=t.permissoes[td.dataset.padrao]?'tipo: permite':'tipo: bloqueia';});
+        $('#u_tipoTxt').textContent=`Sem exceção, o usuário segue o tipo "${t.nome}" (carteira: ${ESCOPOS[t.escopo]}).`;};
+      $('#u_papel').addEventListener('change',pad);pad();
+      $('#uF').addEventListener('submit',async ev=>{ev.preventDefault();if(!ADMIN)return;
+        const email=$('#u_email').value.trim().toLowerCase();
+        if(isNew&&S.usuarios.some(x=>(x.email||'').toLowerCase()===email)){$('#u_err').textContent='Já existe um usuário com esse e-mail.';return;}
+        const permissoes={};document.querySelectorAll('[data-tri]').forEach(s=>{if(s.value!=='')permissoes[s.dataset.tri]=s.value==='1';});
+        const papel=$('#u_papel').value,gerente=$('#u_ger').value||null,escopo=$('#u_esc').value||null;
+        const t=P[papel]||{};
+        if((escopo||t.escopo)==='proprio'&&!gerente){$('#u_err').textContent='Este usuário vê só a própria carteira: escolha o gerente vinculado.';return;}
+        if(u.id&&u.id===usuarioAtual().id&&papel!=='admin'&&permissoes.configurar!==true&&!(t.permissoes||{}).configurar){$('#u_err').textContent='Você tiraria o seu próprio acesso às Configurações.';return;}
+        const data={...u,nome:$('#u_nome').value.trim(),email,papel,gerente,escopo,areas:[...document.querySelectorAll('[data-uarea]:checked')].map(i=>i.value),permissoes,ativo:$('#u_ativo').checked};
+        try{await salvarUsuario(data);closeDrawer();toast(isNew?'Usuário cadastrado':'Usuário salvo');}catch(err){writeErr(err,'#u_err');}});});
+}
+async function salvarPapeis(P){await api.salvarPapeis(P);await recarregar('papeis');}
+async function salvarUsuario(u){await api.salvarUsuario(u);await recarregar('usuarios');}
 /* ================= roteamento ================= */
-const VIEWS=ADMIN?['painel','oportunidades','clientes','faturamento','config']:['painel','oportunidades','clientes','faturamento'];
-if(!ADMIN)document.querySelector('#nav a[href="#config"]')?.remove();
-const cur=()=>{const h=location.hash.slice(1);return VIEWS.includes(h)?h:'painel';};
+const cur=()=>{const h=location.hash.slice(1);return VIEWS.includes(h)?h:(VIEWS[0]||null);};
 function renderAll(){
-  const v=cur(); VIEWS.forEach(n=>{$('#v-'+n).hidden=n!==v;}); $('#hero').hidden=v!=='painel';
+  aplicarAcesso();
+  const v=cur(); TODAS_VIEWS.forEach(n=>{$('#v-'+n).hidden=n!==v;}); $('#hero').hidden=v!=='painel';
+  $('#semAcesso').hidden=!!v; if(!v)return;
   document.querySelectorAll('#nav a').forEach(a=>{if(a.getAttribute('href')==='#'+v)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});
   const gl=gerentes(); ['#fGerC'].forEach(id=>{const c=$(id).value;$(id).innerHTML=opts(gl,c,'Todos os gerentes');});
   ({painel:renderPainel,oportunidades:renderOpps,clientes:renderClientes,faturamento:renderFat,config:renderConfig})[v]();
@@ -630,11 +735,11 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDrawer();});
 const gerForm=()=>{const c=S.gerCad.filter(g=>g.ativo!==false).map(g=>g.nome);return c.length?uniq(c):gerentes();};
 
 function oppForm(o,preCli){
-  const isNew=!o; o=o||{status:(STATUS.find(s=>s.open&&s.ativa!==false)||STATUS[0]).k,probabilidade:(STATUS.find(s=>s.open&&s.ativa!==false)||STATUS[0]).p,gerente:S.sel.size===1?[...S.sel][0]:'',cadastro:TODAY_ISO,cliente:preCli||''};
+  const isNew=!o; const ro=S.readOnly||!(isNew?pode('criar_oportunidades'):pode('editar_oportunidades')); o=o||{status:(STATUS.find(s=>s.open&&s.ativa!==false)||STATUS[0]).k,probabilidade:(STATUS.find(s=>s.open&&s.ativa!==false)||STATUS[0]).p,gerente:S.sel.size===1?[...S.sel][0]:'',cadastro:TODAY_ISO,cliente:preCli||''};
   const clis=S.clientes.map(c=>c.nome).sort((a,b)=>a.localeCompare(b,'pt'));
   openDrawer(`
     <div class="card-head" style="margin:0"><h2 style="font-size:22px">${isNew?'Nova oportunidade':'Oportunidade nº '+esc(o.numero)}</h2><button class="ghost" data-close>Fechar</button></div>
-    ${S.readOnly?'<div class="banner warn">Você pode ver, mas não editar, os dados.</div>':''}
+    ${ro?'<div class="banner warn">Você pode ver, mas não editar, esta oportunidade.</div>':''}
     <form class="form" id="oppF">
       <label class="full">Oportunidade<input id="o_titulo" required value="${esc(o.titulo)}"></label>
       <label>Cliente<input id="o_cliente" list="dlCli" required value="${esc(o.cliente)}"><datalist id="dlCli">${clis.map(c=>`<option value="${esc(c)}">`).join('')}</datalist></label>
@@ -653,13 +758,13 @@ function oppForm(o,preCli){
       <label>Fechamento previsto<input id="o_fech" type="date" required value="${esc(o.fechamento||'')}"></label>
       <label class="full">Observações<textarea id="o_obs">${esc(o.observacoes||'')}</textarea></label>
       <div class="full note" id="o_total"></div><div class="full err" id="o_err"></div>
-      <div class="full actions"><button type="button" class="ghost" data-close>Cancelar</button><button class="blue" ${S.readOnly?'disabled':''}>${isNew?'Cadastrar':'Salvar alterações'}</button></div>
+      <div class="full actions"><button type="button" class="ghost" data-close>Cancelar</button><button class="blue" ${ro?'disabled':''}>${isNew?'Cadastrar':'Salvar alterações'}</button></div>
     </form>`,d=>{
       const tot=()=>{$('#o_total').textContent=`Valor total: ${brl((+$('#o_vs').value||0)+(+$('#o_vsw').value||0))} · Valor no ano (usado no forecast): ${brl((+$('#o_fs').value||0)+(+$('#o_sa').value||0))}`;};
       ['#o_vs','#o_vsw','#o_fs','#o_sa'].forEach(s=>$(s).addEventListener('input',tot));tot();
       $('#o_status').addEventListener('change',e=>{$('#o_prob').value=ST[e.target.value]?.p??$('#o_prob').value;});
       d.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',closeDrawer));
-      $('#oppF').addEventListener('submit',async e=>{e.preventDefault();if(S.readOnly)return;
+      $('#oppF').addEventListener('submit',async e=>{e.preventDefault();if(ro)return;if(S.readOnly)return;
         const nome=$('#o_cliente').value.trim();const c=S.clientes.find(x=>x.nome.toLowerCase()===nome.toLowerCase());
         const data={...o,titulo:$('#o_titulo').value.trim(),cliente:c?c.nome:nome,clienteId:c?c.id:slug(nome),gerente:$('#o_gerente').value,status:$('#o_status').value,
           probabilidade:Math.max(0,Math.min(100,+$('#o_prob').value||0)),area:$('#o_area').value,revenda:$('#o_rev').value||null,software:$('#o_soft').value||null,parceiro:$('#o_parc').value||null,
@@ -677,7 +782,7 @@ const semPermissao=e=>e&&(e.code==='42501'||/row-level security|permission/i.tes
 function writeErr(err,sel){if(semPermissao(err))$(sel).textContent='Você não tem permissão para gravar este registro (só a carteira do próprio gerente pode ser alterada).';
   else $(sel).textContent='Não foi possível salvar: '+(err&&err.message||'tente de novo em alguns segundos.');}
 
-function cliForm(c){const isNew=!c;c=c||{gerente:S.sel.size===1?[...S.sel][0]:'',segmento:'Público'};
+function cliForm(c){const isNew=!c;const ro=S.readOnly||!pode('editar_clientes');c=c||{gerente:S.sel.size===1?[...S.sel][0]:'',segmento:'Público'};
   openDrawer(`<div class="card-head" style="margin:0"><h2 style="font-size:22px">${isNew?'Novo cliente':'Editar cliente'}</h2><button class="ghost" data-close>Fechar</button></div>
     <form class="form" id="cliF">
       <label class="full">Nome<input id="c_nome" required value="${esc(c.nome)}"></label>
@@ -687,9 +792,9 @@ function cliForm(c){const isNew=!c;c=c||{gerente:S.sel.size===1?[...S.sel][0]:''
       <label>Contato principal<input id="c_cont" value="${esc(c.contato||'')}"></label>
       <label class="full">Nome no faturamento (siglas, separadas por vírgula)<input id="c_sig" value="${esc((c.siglasFaturamento||[]).join(', '))}"></label>
       <div class="full err" id="c_err"></div>
-      <div class="full actions"><button type="button" class="ghost" data-close>Cancelar</button><button class="blue" ${S.readOnly?'disabled':''}>${isNew?'Cadastrar':'Salvar'}</button></div>
+      <div class="full actions"><button type="button" class="ghost" data-close>Cancelar</button><button class="blue" ${ro?'disabled':''}>${isNew?'Cadastrar':'Salvar'}</button></div>
     </form>`,()=>{
-      $('#cliF').addEventListener('submit',async e=>{e.preventDefault();if(S.readOnly)return;
+      $('#cliF').addEventListener('submit',async e=>{e.preventDefault();if(ro)return;if(S.readOnly)return;
         const nome=$('#c_nome').value.trim();const id=isNew?slug(nome):c.id;
         if(isNew&&S.clientes.some(x=>x.id===id)){$('#c_err').textContent='Já existe um cliente com esse nome.';return;}
         const data={nome,gerente:$('#c_ger').value,segmento:$('#c_seg').value,cnpj:$('#c_cnpj').value.trim(),contato:$('#c_cont').value.trim(),
@@ -724,16 +829,19 @@ async function recarregar(qual?:string){
     if(!qual||qual==='etapas')aplicarEtapas(await api.etapas());
     if(!qual||qual==='gerentes')S.gerCad=await api.gerentes();
     if(!qual||qual==='opcoes')S.listas=await api.listas();
+    if(!qual||qual==='papeis')S.papeis=await api.papeis();
+    if(ADMIN&&(!qual||qual==='usuarios'||qual==='perfis'||qual==='convites'))S.usuarios=await api.usuarios();
     if(!qual||qual==='metas'){S.metasDoc=await api.metasDetalhe(+S.ano);S.metas=S.metasDoc.valores;}
     renderAll();
   }catch(e){setStatus('Não foi possível atualizar os dados: '+(e.message||e),true);}
 }
-$('#userNome').textContent=`${perfil.nome} · ${perfil.papel==='gerente'?'Gerente':perfil.papel==='diretor'?'Diretoria':'Administração'}`;
+const mostrarNome=()=>{$('#userNome').textContent=`${perfil.nome} · ${(papeisAtuais()[perfil.papel]||{nome:perfil.papel}).nome}`;};
+mostrarNome();
 renderAll();
 (async()=>{
   try{
-    const [o,c,f,m,r,et,gc,ls]=await Promise.all([api.oportunidades(),api.clientes(),api.faturamento(),api.metasDetalhe(+S.ano),api.running(),api.etapas(),api.gerentes(),api.listas()]);
-    aplicarEtapas(et);S.opps=o;S.clientes=c;S.fat=f;S.metasDoc=m;S.metas=m.valores;S.running=r;S.gerCad=gc;S.listas=ls;
+    const [o,c,f,m,r,et,gc,ls,pp]=await Promise.all([api.oportunidades(),api.clientes(),api.faturamento(),api.metasDetalhe(+S.ano),api.running(),api.etapas(),api.gerentes(),api.listas(),api.papeis()]);
+    aplicarEtapas(et);S.opps=o;S.clientes=c;S.fat=f;S.metasDoc=m;S.metas=m.valores;S.running=r;S.gerCad=gc;S.listas=ls;S.papeis=pp;aplicarAcesso();mostrarNome();if(ADMIN)S.usuarios=await api.usuarios().catch(()=>[]);
     setStatus(o.length?'':'Ainda não há oportunidades. Use "Nova oportunidade" para registrar a primeira.');
     renderAll();
     let t;api.aoVivo(tab=>{clearTimeout(t);t=setTimeout(()=>recarregar(tab),300);});

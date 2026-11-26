@@ -5,7 +5,8 @@ const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 export const configurado = Boolean(url && anon);
 export const sb = configurado ? createClient(url, anon) : (null as any);
 
-export type Perfil = { user_id: string; nome: string; email?: string; gerente: string | null; papel: 'gerente' | 'diretor' | 'admin' };
+export type Perfil = { user_id: string; nome: string; email?: string; gerente: string | null; papel: string;
+  areas?: string[]; permissoes?: Record<string, boolean>; escopo?: 'proprio' | 'area' | 'todos' | null; ativo?: boolean };
 
 // ---- mapeamento banco (snake_case) <-> app (camelCase) ----
 export function oppFromDb(r: any) {
@@ -119,6 +120,35 @@ export const api = {
     if (rows.length) q = q.not('valor', 'in', `(${rows.map(r => `"${r.valor.replace(/"/g, '\\"')}"`).join(',')})`);
     const { error } = await q; if (error) throw error;
   },
+  // ---- acessos ----
+  async papeis() {
+    const { data, error } = await sb.from('papeis').select('*'); if (error) throw error;
+    if (!data?.length) return null;
+    return Object.fromEntries(data.map((t: any) => [t.papel, { nome: t.nome, escopo: t.escopo, permissoes: t.permissoes || {} }]));
+  },
+  async salvarPapeis(P: Record<string, { nome: string; escopo: string; permissoes: Record<string, boolean> }>) {
+    const rows = Object.entries(P).map(([papel, t]) => ({ papel, nome: t.nome, escopo: t.escopo, permissoes: t.permissoes }));
+    const { error } = await sb.from('papeis').upsert(rows); if (error) throw error;
+    const { data: atuais, error: e2 } = await sb.from('papeis').select('papel'); if (e2) throw e2;
+    const sobra = (atuais || []).map((r: any) => r.papel).filter((k: string) => !P[k]);
+    if (sobra.length) { const { error: e3 } = await sb.from('papeis').delete().in('papel', sobra); if (e3) throw e3; }
+  },
+  // perfis (quem já entrou) + convites (cadastrados que ainda não entraram)
+  async usuarios() {
+    const [{ data: ps, error: e1 }, { data: cs, error: e2 }] = await Promise.all([sb.from('perfis').select('*'), sb.from('convites').select('*')]);
+    if (e1) throw e1; if (e2) throw e2;
+    const base = (r: any) => ({ nome: r.nome, email: r.email, papel: r.papel, gerente: r.gerente, areas: r.areas || [], permissoes: r.permissoes || {}, escopo: r.escopo, ativo: r.ativo !== false });
+    return [...(ps || []).map((r: any) => ({ id: r.user_id, user_id: r.user_id, ...base(r) })),
+            ...(cs || []).map((r: any) => ({ id: 'convite:' + r.email, pendente: true, ...base(r) }))];
+  },
+  async salvarUsuario(u: any) {
+    const d = { nome: u.nome, papel: u.papel, gerente: u.gerente || null, areas: u.areas || [], permissoes: u.permissoes || {}, escopo: u.escopo || null, ativo: u.ativo !== false };
+    if (u.user_id) { const { error } = await sb.from('perfis').update(d).eq('user_id', u.user_id); if (error) throw error; return; }
+    const email = String(u.email).trim().toLowerCase();
+    const antigo = u.id && String(u.id).startsWith('convite:') ? String(u.id).slice(8) : null;
+    if (antigo && antigo !== email) { const { error } = await sb.from('convites').delete().eq('email', antigo); if (error) throw error; }
+    const { error } = await sb.from('convites').upsert({ email, ...d }); if (error) throw error;
+  },
   async gerentes() {
     const { data, error } = await sb.from('gerentes').select('*').order('nome'); if (error) throw error;
     return data || [];
@@ -150,6 +180,7 @@ export const api = {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'gerentes' }, () => fn('gerentes'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'metas' }, () => fn('metas'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'opcoes' }, () => fn('opcoes'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'papeis' }, () => fn('papeis'))
       .subscribe();
   },
 };

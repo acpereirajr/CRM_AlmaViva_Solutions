@@ -194,6 +194,17 @@ dl.facts dd{margin:0;font-weight:700}
 .cfg-pane input.mini{width:150px;text-align:right}
 .ico{padding:3px 8px;font-size:12px}
 .tag.off{opacity:.55}
+.perm-mat th.c,.perm-mat td.c{text-align:center}
+.perm-mat td.c select{font-size:12px;padding:4px 6px}
+.perm-mat tr.grp td{background:var(--surface-2);font-weight:800;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.perm-mat input[type=checkbox]{width:auto}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.chip{display:flex!important;flex-direction:row!important;gap:6px;align-items:center;border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-weight:600;color:var(--fg)!important}
+.chip input{width:auto}
+.perm-tab td{padding:5px 4px;font-size:12.5px}
+.perm-tab td.w{min-width:0}
+.perfil-teste-unused{display:flex;gap:6px;align-items:center;font-size:12px;color:#cfe0f5;margin-right:12px}
+.perfil-teste select{padding:4px 8px;font-size:12px;max-width:220px}
 .listas-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,360px),1fr))}
 .lista table{min-width:0;table-layout:auto}
 .lista table td{padding:6px 4px}

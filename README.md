@@ -6,19 +6,20 @@ CRM da área Comercial. Os gerentes cadastram oportunidades e clientes, e a dire
 - **Banco, login e permissões:** Supabase (Postgres + Auth + Row Level Security).
 - **Carga inicial:** script que lê as planilhas `FATURAMENTOS_2026.xlsx` (aba Consolidado) e o export de oportunidades.
 
-## O que cada perfil vê
+## Acessos
 
-| Perfil | Oportunidades e clientes | Faturamento | Painel |
-|---|---|---|---|
-| `gerente` | só a própria carteira (lê e edita) | só o próprio | travado no próprio nome, sem escolher outro gerente |
-| `diretor` | todas (lê e edita) | todo | escolhe uma ou várias áreas e um ou vários gerentes |
-| `admin` | todas, e pode apagar | todo | idem, e é o único que vê e altera as Configurações |
+Cada usuário tem um **tipo** (Administrador, Diretor, Gerente ou outro criado na tela). O tipo define:
 
-A lista de oportunidades segue a seleção de áreas e gerentes do painel. As regras ficam no banco (RLS). Mesmo quem chamar a API direto não vê a carteira de outro gerente.
+- **Carteira que enxerga:** só a própria (o painel fica travado no gerente vinculado), os gerentes das suas áreas, ou todos.
+- **Permissões:** quais telas vê (Painel, Oportunidades, Clientes, Faturamento, Configurações) e o que pode fazer (cadastrar e editar oportunidades, editar clientes, alterar o Running previsto).
+
+No cadastro de cada usuário dá para abrir **exceções**: outra carteira, ou uma permissão liberada ou bloqueada só para ele. Tudo isso fica em *Configurações > Usuários e acessos*, que só quem tem a permissão Configurações vê. O Administrador nunca perde o acesso às Configurações.
+
+Padrão: o gerente vê só a própria carteira; o diretor escolhe uma ou várias áreas e um ou vários gerentes; o administrador vê tudo. A lista de oportunidades segue a seleção do painel. As regras valem no banco (RLS): mesmo quem chamar a API direto só lê e grava o que o seu acesso permite.
 
 ## Configurações (aba do app)
 
-Só administradores veem e alteram esta aba.
+Só quem tem a permissão Configurações vê e altera esta aba (por padrão, só o Administrador).
 
 - **Etapas das oportunidades:** nome, ordem, tipo (Em aberto, Ganha, Perdida), probabilidade padrão e se está ativa. "Em aberto" entra no forecast, a única etapa "Ganha" entra no pipeline ganho. Uma etapa em uso não pode ser renomeada nem excluída, só desativada.
 - **Gerentes de negócios:** e-mail, área, território, meta do ano e situação. Gerentes inativos saem da seleção do painel e dos formulários.
@@ -35,7 +36,7 @@ Só administradores veem e alteram esta aba.
 
 ## Como colocar no ar
 
-1. **Supabase.** Crie um projeto em [supabase.com](https://supabase.com), na região São Paulo. Em *SQL Editor*, rode os arquivos de `supabase/migrations/` na ordem do nome: primeiro `20261126000000_schema.sql`, depois `20261126010000_configuracoes.sql`.
+1. **Supabase.** Crie um projeto em [supabase.com](https://supabase.com), na região São Paulo. Em *SQL Editor*, rode os arquivos de `supabase/migrations/` na ordem do nome: `20261126000000_schema.sql`, `20261126010000_configuracoes.sql` e `20261126020000_acessos.sql`.
 2. **Variáveis.** Copie `.env.example` para `.env` e preencha com os dados de *Project Settings > API*. A chave `service_role` só é usada pelo script de importação. Não a coloque no Vercel.
 3. **Carga inicial.** Rode na sua máquina, com as planilhas na pasta:
    ```bash
@@ -43,13 +44,13 @@ Só administradores veem e alteram esta aba.
    npm run importar -- --faturamento FATURAMENTOS_2026.xlsx --oportunidades exporta_opp_AC.xlsx --metas scripts/metas-2026.json
    ```
    Rode de novo sempre que houver uma planilha de faturamento nova. O faturamento é substituído. As oportunidades são atualizadas pelo número, e os clientes cadastrados no CRM são preservados.
-4. **Usuários.** Em *Authentication > Users*, convide cada pessoa por e-mail. Depois crie o perfil de cada uma no SQL Editor:
+4. **Primeiro administrador.** Entre no app uma vez com o seu e-mail (link de acesso). Depois, no SQL Editor, crie o seu perfil:
    ```sql
    insert into perfis (user_id, nome, email, gerente, papel)
-   select id, 'Antonio Carlos Pereira Junior', email, 'Antonio C Pereira', 'admin'
-   from auth.users where email = 'email@almaviva...';
+   select id, 'Seu nome', email, 'Antonio C Pereira', 'admin'
+   from auth.users where email = 'seu-email@...';
    ```
-   O campo `gerente` precisa ser igual ao nome usado nas oportunidades e metas, por exemplo `Daniele Freire` ou `Marcus Rondon`.
+   Os demais usuários você cadastra no próprio app, em *Configurações > Usuários e acessos*. A pessoa entra com o e-mail cadastrado e o acesso é liberado no primeiro login. Quem entrar sem cadastro não vê nada.
 5. **Vercel.** Importe este repositório em [vercel.com](https://vercel.com). Defina `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` e faça o deploy. Em seguida, no Supabase, coloque a URL do Vercel em *Authentication > URL Configuration*, para o link de acesso por e-mail funcionar.
 
 ## Desenvolvimento
@@ -66,11 +67,10 @@ npm run build    # checa tipos e gera dist/
 - `src/main.ts`: login e inicialização.
 - `src/app.ts`: cálculos, gráficos e telas.
 - `src/supabase.ts`: acesso ao banco e conversão entre os nomes do banco e os do app.
-- `supabase/migrations/`: tabelas, permissões (RLS), histórico de mudanças de etapa e tabelas de configuração (etapas, gerentes, opções).
+- `supabase/migrations/`: tabelas, permissões (RLS), histórico de mudanças de etapa, tabelas de configuração (etapas, gerentes, opções) e acessos (tipos de usuário, perfis e convites).
 - `scripts/importar-planilhas.mjs`: carga das planilhas.
 
 ## Próximos passos
 
-- Tela de administração de usuários (login e papel), hoje feita pelo painel do Supabase.
 - "O que mudou desde a última atualização", usando a tabela `oportunidades_historico`, que já registra cada mudança de etapa.
 - Separar `src/app.ts`, que veio do protótipo, em módulos tipados por tela.

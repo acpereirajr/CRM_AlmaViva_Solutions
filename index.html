@@ -55,6 +55,7 @@
 </section>
 
 <main class="wrap">
+  <div id="semAcesso" class="banner warn" hidden>Seu usuário não tem acesso a nenhuma tela do CRM. Fale com a administração.</div>
   <div id="status" class="banner" style="margin-top:18px">Carregando oportunidades e clientes…</div>
 
   <!-- PAINEL -->
@@ -212,6 +213,7 @@
       <button data-cfg="gerentes" role="tab">Gerentes de negócios</button>
       <button data-cfg="metas" role="tab">Metas</button>
       <button data-cfg="listas" role="tab">Listas de opções</button>
+      <button data-cfg="acessos" role="tab">Usuários e acessos</button>
     </div>
     <div id="cfg-etapas" class="cfg-pane card" style="padding:0">
       <div class="card-head" style="padding:18px 18px 0"><div><h3>Etapas das oportunidades</h3><div class="sub">A ordem define o funil. "Em aberto" entra no forecast, "Ganha" entra no pipeline ganho, "Perdida" sai dos dois.</div></div><button class="blue" id="btnNovaEtapa">Nova etapa</button></div>
@@ -237,6 +239,16 @@
     <div id="cfg-listas" class="cfg-pane" hidden>
       <p class="note" style="margin:0 0 10px">Opções dos campos de seleção. Opções desativadas somem dos formulários, mas continuam nos registros antigos. Uma opção em uso não pode ser excluída, só desativada.</p>
       <div class="grid listas-grid" id="listasGrid"></div>
+    </div>
+    <div id="cfg-acessos" class="cfg-pane" hidden>
+      <div class="card" style="padding:0">
+        <div class="card-head" style="padding:18px 18px 0"><div><h3>Tipos de usuário</h3><div class="sub">O que cada tipo pode ver e fazer. Vale para todos os usuários do tipo, menos as exceções cadastradas no usuário.</div></div><button class="blue" id="btnNovoTipo">Novo tipo</button></div>
+        <div class="scroll"><table id="tbPapeis" class="perm-mat"></table></div>
+      </div>
+      <div class="card" style="padding:0;margin-top:16px">
+        <div class="card-head" style="padding:18px 18px 0"><div><h3>Usuários</h3><div class="sub">Quem acessa o CRM, com qual tipo, qual gerente representa e quais exceções tem.</div></div><button class="blue" id="btnNovoUsr">Novo usuário</button></div>
+        <div class="scroll"><table id="tbUsuarios"></table></div>
+      </div>
     </div>
   </section>
 </main>
