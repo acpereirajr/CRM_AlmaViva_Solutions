@@ -12,9 +12,18 @@ CRM da área Comercial. Os gerentes cadastram oportunidades e clientes, e a dire
 |---|---|---|---|
 | `gerente` | só a própria carteira (lê e edita) | só o próprio | travado no próprio nome |
 | `diretor` | todas (lê e edita) | todo | escolhe qualquer combinação de gerentes |
-| `admin` | todas, e pode apagar | todo | idem, e gerencia perfis e metas |
+| `admin` | todas, e pode apagar | todo | idem, e altera as Configurações |
 
 As regras ficam no banco (RLS). Mesmo quem chamar a API direto não vê a carteira de outro gerente.
+
+## Configurações (aba do app)
+
+Diretores veem a aba; só administradores alteram. Gerentes não veem.
+
+- **Etapas das oportunidades:** nome, ordem, tipo (Em aberto, Ganha, Perdida), probabilidade padrão e se está ativa. "Em aberto" entra no forecast, a única etapa "Ganha" entra no pipeline ganho. Uma etapa em uso não pode ser renomeada nem excluída, só desativada.
+- **Gerentes de negócios:** e-mail, área, território, meta do ano e situação. Gerentes inativos saem da seleção do painel e dos formulários.
+- **Metas:** período e meta de cada gerente para o ano escolhido no painel.
+- **Listas de opções:** valores de cada campo de seleção (área de negócio, fabricante, parceiro, tipo de revenda, segmento do cliente, área e território do gerente). Opções desativadas somem dos formulários, mas continuam nos registros antigos.
 
 ## Regras de cálculo (iguais às do dashboard anterior)
 
@@ -26,7 +35,7 @@ As regras ficam no banco (RLS). Mesmo quem chamar a API direto não vê a cartei
 
 ## Como colocar no ar
 
-1. **Supabase.** Crie um projeto em [supabase.com](https://supabase.com), na região São Paulo. Em *SQL Editor*, rode o arquivo `supabase/migrations/20261126000000_schema.sql`.
+1. **Supabase.** Crie um projeto em [supabase.com](https://supabase.com), na região São Paulo. Em *SQL Editor*, rode os arquivos de `supabase/migrations/` na ordem do nome: primeiro `20261126000000_schema.sql`, depois `20261126010000_configuracoes.sql`.
 2. **Variáveis.** Copie `.env.example` para `.env` e preencha com os dados de *Project Settings > API*. A chave `service_role` só é usada pelo script de importação. Não a coloque no Vercel.
 3. **Carga inicial.** Rode na sua máquina, com as planilhas na pasta:
    ```bash
@@ -57,11 +66,11 @@ npm run build    # checa tipos e gera dist/
 - `src/main.ts`: login e inicialização.
 - `src/app.ts`: cálculos, gráficos e telas.
 - `src/supabase.ts`: acesso ao banco e conversão entre os nomes do banco e os do app.
-- `supabase/migrations/`: tabelas, permissões (RLS) e histórico de mudanças de etapa.
+- `supabase/migrations/`: tabelas, permissões (RLS), histórico de mudanças de etapa e tabelas de configuração (etapas, gerentes, opções).
 - `scripts/importar-planilhas.mjs`: carga das planilhas.
 
 ## Próximos passos
 
-- Tela de administração de usuários e metas, hoje feita pelo painel do Supabase.
+- Tela de administração de usuários (login e papel), hoje feita pelo painel do Supabase.
 - "O que mudou desde a última atualização", usando a tabela `oportunidades_historico`, que já registra cada mudança de etapa.
 - Separar `src/app.ts`, que veio do protótipo, em módulos tipados por tela.

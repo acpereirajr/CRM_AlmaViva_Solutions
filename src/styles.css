@@ -186,3 +186,20 @@ dl.facts dd{margin:0;font-weight:700}
 .login form{width:min(400px,100%);background:var(--surface);border-radius:16px;padding:28px;display:grid;gap:14px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
 .login h1{margin:0;font-size:24px;font-weight:900}
 .login label{display:grid;gap:5px;font-size:12px;font-weight:700;color:var(--muted)}
+
+/* Configurações */
+.tabs-cfg{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0}
+.tabs-cfg button{border-radius:999px}
+.tabs-cfg button[aria-selected="true"]{background:var(--c1);color:#fff;border-color:var(--c1)}
+.cfg-pane input.mini{width:150px;text-align:right}
+.ico{padding:3px 8px;font-size:12px}
+.tag.off{opacity:.55}
+.listas-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,360px),1fr))}
+.lista table{min-width:0;table-layout:auto}
+.lista table td{padding:6px 4px}
+.lista .ico{padding:2px 6px;margin-left:2px}
+.lista td.w{word-break:break-word;min-width:0}
+.lista td{white-space:nowrap}
+.lista td.w{white-space:normal}
+.lista-add{display:flex;gap:6px;margin-top:10px}
+.lista-add input{flex:1}

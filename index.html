@@ -27,6 +27,7 @@
       <a href="#oportunidades">Oportunidades</a>
       <a href="#clientes">Clientes</a>
       <a href="#faturamento">Faturamento 2026</a>
+      <a href="#config">Configurações</a>
     </nav>
     <div class="spacer"></div>
     <div class="status-dot"><i></i><span id="liveTxt">Dados ao vivo</span></div>
@@ -201,6 +202,41 @@
       <div class="pager"><span id="fPgInfo"></span><span class="toolbar"><button id="fPrev">Anterior</button><button id="fNext">Próxima</button></span></div>
     </div>
     <p class="note" style="text-align:right">Fonte: FATURAMENTOS_2026.xlsx, aba Consolidado. Lançamentos cancelados e sem valor ficam de fora.</p>
+  </section>
+  <!-- CONFIGURAÇÕES -->
+  <section class="view" id="v-config" hidden style="margin-top:22px">
+    <div class="sec-head" style="margin:0"><h2>Configurações</h2><span class="sub">Etapas do funil, gerentes de negócios, metas e as opções de cada campo de seleção. As mudanças valem na hora para todo o CRM.</span></div>
+    <div class="tabs-cfg" id="cfgTabs" role="tablist">
+      <button data-cfg="etapas" role="tab">Etapas das oportunidades</button>
+      <button data-cfg="gerentes" role="tab">Gerentes de negócios</button>
+      <button data-cfg="metas" role="tab">Metas</button>
+      <button data-cfg="listas" role="tab">Listas de opções</button>
+    </div>
+    <div id="cfg-etapas" class="cfg-pane card" style="padding:0">
+      <div class="card-head" style="padding:18px 18px 0"><div><h3>Etapas das oportunidades</h3><div class="sub">A ordem define o funil. "Em aberto" entra no forecast, "Ganha" entra no pipeline ganho, "Perdida" sai dos dois.</div></div><button class="blue" id="btnNovaEtapa">Nova etapa</button></div>
+      <div class="scroll"><table id="tbEtapas"></table></div>
+    </div>
+    <div id="cfg-gerentes" class="cfg-pane card" style="padding:0" hidden>
+      <div class="card-head" style="padding:18px 18px 0"><div><h3>Gerentes de negócios</h3><div class="sub">Área, território e meta de cada gerente. Gerentes inativos saem da seleção do painel e dos formulários.</div></div><button class="blue" id="btnNovoGer">Novo gerente</button></div>
+      <div class="scroll"><table id="tbGer"></table></div>
+    </div>
+    <div id="cfg-metas" class="cfg-pane card" hidden>
+      <div class="card-head" style="margin:0"><div><h3>Metas</h3><div class="sub" id="metaFonte"></div></div></div>
+      <form id="metaF">
+        <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin-top:12px">
+          <label class="field"><span>Início do período</span><input type="date" id="m_ini"></label>
+          <label class="field"><span>Fim do período</span><input type="date" id="m_fim"></label>
+          <div class="field"><span>Meta total</span><b id="m_tot" style="font-size:20px"></b></div>
+        </div>
+        <div class="scroll" style="margin-top:14px"><table id="tbMetas"></table></div>
+        <div class="err" id="m_err"></div>
+        <div class="actions"><button type="button" class="ghost" id="m_reset">Desfazer</button><button class="blue" id="m_save">Salvar metas</button></div>
+      </form>
+    </div>
+    <div id="cfg-listas" class="cfg-pane" hidden>
+      <p class="note" style="margin:0 0 10px">Opções dos campos de seleção. Opções desativadas somem dos formulários, mas continuam nos registros antigos. Uma opção em uso não pode ser excluída, só desativada.</p>
+      <div class="grid listas-grid" id="listasGrid"></div>
+    </div>
   </section>
 </main>
 

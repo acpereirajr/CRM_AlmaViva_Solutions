@@ -21,7 +21,7 @@ export function oppFromDb(r: any) {
 export function oppToDb(o: any, userId?: string) {
   const r: any = {
     gerente: o.gerente, cliente: o.cliente, cliente_id: o.clienteId, status: o.status, titulo: o.titulo, area: o.area,
-    software: o.software, parceiro: o.parceiro ?? null, cadastro: o.cadastro || null, fechamento: o.fechamento || null,
+    revenda: o.revenda ?? null, software: o.software, parceiro: o.parceiro ?? null, cadastro: o.cadastro || null, fechamento: o.fechamento || null,
     probabilidade: o.probabilidade, valor_total: o.valorTotal, valor_servico: o.valorServico, valor_software: o.valorSoftware,
     faturamento_servico: o.faturamentoServico, software_ano: o.softwareAno, observacoes: o.observacoes ?? null,
     atualizado_em: new Date().toISOString(), atualizado_por: userId ?? null,
@@ -85,11 +85,71 @@ export const api = {
     const { error } = await sb.from('running_previsto').upsert({ chave, valor, atualizado_em: new Date().toISOString(), atualizado_por: userId ?? null });
     if (error) throw error;
   },
+  // ---- configurações (escrita só para admin, garantida pelo RLS) ----
+  async etapas() {
+    const { data, error } = await sb.from('etapas').select('*').order('ordem'); if (error) throw error;
+    return (data || []).map((e: any) => ({ k: e.nome, p: e.probabilidade, tipo: e.tipo, ativa: e.ativa }));
+  },
+  async salvarEtapas(lista: { k: string; p: number; tipo: string; ativa: boolean }[], userId?: string) {
+    const agora = new Date().toISOString();
+    // a etapa "ganha" anterior vira provisória para não violar o índice de etapa ganha única durante a troca
+    const rows = lista.map((e, i) => ({ nome: e.k, ordem: i + 1, tipo: e.tipo, probabilidade: e.p, ativa: e.ativa !== false, atualizado_em: agora, atualizado_por: userId ?? null }));
+    const { data: atuais, error: e0 } = await sb.from('etapas').select('nome,tipo'); if (e0) throw e0;
+    const ganhaNova = rows.find(r => r.tipo === 'ganha')?.nome;
+    const ganhaAntiga = (atuais || []).find((r: any) => r.tipo === 'ganha')?.nome;
+    if (ganhaAntiga && ganhaAntiga !== ganhaNova) {
+      const { error } = await sb.from('etapas').update({ tipo: 'perdida' }).eq('nome', ganhaAntiga); if (error) throw error;
+    }
+    const { error: e1 } = await sb.from('etapas').upsert(rows); if (e1) throw e1;
+    const sobra = (atuais || []).map((r: any) => r.nome).filter((n: string) => !rows.some(r => r.nome === n));
+    if (sobra.length) { const { error } = await sb.from('etapas').delete().in('nome', sobra); if (error) throw error; }
+  },
+  // listas de opções dos campos de seleção: { fabricante: [{v, ativo}], ... }; null = usar o padrão do app
+  async listas() {
+    const { data, error } = await sb.from('opcoes').select('lista,valor,ativo').order('lista').order('ordem'); if (error) throw error;
+    if (!data?.length) return null;
+    const out: Record<string, { v: string; ativo: boolean }[]> = {};
+    for (const r of data) (out[r.lista] ||= []).push({ v: r.valor, ativo: r.ativo });
+    return out;
+  },
+  async salvarLista(lista: string, itens: { v: string; ativo?: boolean }[]) {
+    const rows = itens.map((i, n) => ({ lista, valor: i.v, ordem: n + 1, ativo: i.ativo !== false }));
+    if (rows.length) { const { error } = await sb.from('opcoes').upsert(rows); if (error) throw error; }
+    let q = sb.from('opcoes').delete().eq('lista', lista);
+    if (rows.length) q = q.not('valor', 'in', `(${rows.map(r => `"${r.valor.replace(/"/g, '\\"')}"`).join(',')})`);
+    const { error } = await q; if (error) throw error;
+  },
+  async gerentes() {
+    const { data, error } = await sb.from('gerentes').select('*').order('nome'); if (error) throw error;
+    return data || [];
+  },
+  async salvarGerente(g: any, userId?: string) {
+    const { error } = await sb.from('gerentes').upsert({ nome: g.nome, email: g.email || null, area: g.area || null, territorio: g.territorio || null,
+      ativo: g.ativo !== false, atualizado_em: new Date().toISOString(), atualizado_por: userId ?? null });
+    if (error) throw error;
+  },
+  async metasDetalhe(ano: number) {
+    const { data, error } = await sb.from('metas').select('gerente,valor,inicio,fim').eq('ano', ano); if (error) throw error;
+    const d = data || [];
+    return { inicio: d[0]?.inicio || '', fim: d[0]?.fim || '', valores: Object.fromEntries(d.map((m: any) => [m.gerente, Number(m.valor)])) };
+  },
+  async salvarMetas(ano: number, inicio: string | null, fim: string | null, valores: Record<string, number>) {
+    const rows = Object.entries(valores).filter(([, v]) => v > 0).map(([gerente, valor]) => ({ gerente, ano, valor, inicio, fim }));
+    if (rows.length) { const { error } = await sb.from('metas').upsert(rows); if (error) throw error; }
+    const manter = rows.map(r => r.gerente);
+    let q = sb.from('metas').delete().eq('ano', ano);
+    if (manter.length) q = q.not('gerente', 'in', `(${manter.map(n => `"${n.replace(/"/g, '\\"')}"`).join(',')})`);
+    const { error } = await q; if (error) throw error;
+  },
   aoVivo(fn: (tabela: string) => void) {
     return sb.channel('crm')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'oportunidades' }, () => fn('oportunidades'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'clientes' }, () => fn('clientes'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'running_previsto' }, () => fn('running_previsto'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'etapas' }, () => fn('etapas'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'gerentes' }, () => fn('gerentes'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'metas' }, () => fn('metas'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'opcoes' }, () => fn('opcoes'))
       .subscribe();
   },
 };

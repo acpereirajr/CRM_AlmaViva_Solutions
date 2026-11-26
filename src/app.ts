@@ -1,30 +1,57 @@
 // @ts-nocheck
-// Lógica das telas (painel, oportunidades, clientes, faturamento).
+// Lógica das telas (painel, oportunidades, clientes, faturamento, configurações).
 // Portado do protótipo; ver README > Próximos passos para a migração a componentes tipados.
 import { api, type Perfil } from './supabase';
 
 export function iniciarApp(perfil: Perfil, userId: string){
 
 /* ================= constantes ================= */
-const STATUS=[
-  {k:'Qualificação',p:10,open:true},{k:'Orçamento',p:30,open:true},{k:'Proposta',p:50,open:true},
-  {k:'Forecast',p:70,open:true},{k:'Negociação',p:90,open:true},{k:'Encerrada - Ganha',p:100},
-  {k:'Encerrada - Perdida',p:0},{k:'Encerrada - Abandonada',p:0},{k:'Encerrada - Encerrada pelo Sistema',p:0}];
-const ST=Object.fromEntries(STATUS.map(s=>[s.k,s]));
-const OPEN=new Set(STATUS.filter(s=>s.open).map(s=>s.k));
-const WON='Encerrada - Ganha';
-const FUNNEL=[...OPEN,WON];
-const AREAS=['Revenda','Consultoria','Desenvolvimento de Soluções','Serviços de Infra-estrutura de TI'];
+// Etapas padrão (as da base). A lista real vem da tabela etapas.
+const ETAPAS_PADRAO=[
+  {k:'Qualificação',p:10,tipo:'aberta'},{k:'Orçamento',p:30,tipo:'aberta'},{k:'Proposta',p:50,tipo:'aberta'},
+  {k:'Forecast',p:70,tipo:'aberta'},{k:'Negociação',p:90,tipo:'aberta'},{k:'Encerrada - Ganha',p:100,tipo:'ganha'},
+  {k:'Encerrada - Perdida',p:0,tipo:'perdida'},{k:'Encerrada - Abandonada',p:0,tipo:'perdida'},{k:'Encerrada - Encerrada pelo Sistema',p:0,tipo:'perdida'}].map(e=>({...e,ativa:true}));
+let STATUS,ST,OPEN,WON,FUNNEL;
+function aplicarEtapas(lista){
+  STATUS=(lista&&lista.length?lista:ETAPAS_PADRAO).map(e=>({...e,open:e.tipo==='aberta'}));
+  ST=Object.fromEntries(STATUS.map(s=>[s.k,s]));
+  OPEN=new Set(STATUS.filter(s=>s.open).map(s=>s.k));
+  WON=(STATUS.find(s=>s.tipo==='ganha')||{}).k||'Encerrada - Ganha';
+  FUNNEL=[...OPEN,WON];
+}
+aplicarEtapas(null);
+const TIPO_LBL={aberta:'Em aberto',ganha:'Ganha',perdida:'Perdida'};
+// Listas de opções dos campos de seleção. A tela Configurações > Listas de opções edita os valores.
+const LISTAS_DEF=[
+  {id:'area',nome:'Área de negócio',onde:'Oportunidade',campo:o=>String(o.area||'').split(',').map(s=>s.trim())},
+  {id:'fabricante',nome:'Fabricante',onde:'Oportunidade',campo:o=>[o.software]},
+  {id:'parceiro',nome:'Parceiro',onde:'Oportunidade',campo:o=>String(o.parceiro||'').split(',').map(s=>s.trim())},
+  {id:'revenda',nome:'Tipo de revenda',onde:'Oportunidade',campo:o=>[o.revenda]},
+  {id:'segmento',nome:'Segmento',onde:'Cliente',cli:c=>[c.segmento]},
+  {id:'area_gerente',nome:'Área do gerente',onde:'Gerente de negócios',ger:g=>[g.area]},
+  {id:'territorio',nome:'Território',onde:'Gerente de negócios',ger:g=>[g.territorio]}];
+const LISTAS_PADRAO={
+  area:['Revenda','Consultoria','Desenvolvimento de Soluções','Serviços de Infra-estrutura de TI'],
+  fabricante:['Google','IBM','Red Hat','Liferay','HCL','Delphix','Perforce','InterSystems','Oracle','AWS','ISS/iSSI'],
+  parceiro:['Google','IBM','RedHat','Liferay','HCL','Delphix/Perforce','ISS/iSSI','InterSystems','Oracle','AWS'],
+  revenda:['Software','Hardware'],
+  segmento:['Público','Privado','Parcerias'],
+  area_gerente:['Público','Privado','Parcerias'],
+  territorio:['PRODESP','PUBLICO','PRIVADO','RJ','DF','PARCERIAS']};
+const listaItens=id=>(S.listas&&S.listas[id])||LISTAS_PADRAO[id].map(v=>({v,ativo:true}));
+// opções ativas da lista, mantendo o valor atual do registro mesmo que inativo ou fora da lista
+const opcoes=(id,atual)=>{const a=listaItens(id).filter(i=>i.ativo!==false).map(i=>i.v);return atual&&!a.includes(atual)?[...a,atual]:a;};
 const MES=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const MESL=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
 const HIDE_GER=new Set(['Sem gerente','Parcerias']);
 const TODAY=new Date(); const TODAY_ISO=TODAY.toISOString().slice(0,10);
 
-const S:any={opps:[],clientes:[],fat:[],metas:{},running:{},readOnly:false,loaded:{o:false,c:false},
+const S:any={listas:null,opps:[],clientes:[],fat:[],metas:{},metasDoc:{},gerCad:[],cfg:'etapas',running:{},readOnly:false,loaded:{o:false,c:false},
   sel:new Set(),ano:'2026',p:{cli:'',fab:'',area:'',res:'gp'},sim:{pct:60,ex:false},evFab:'',
   f:{q:'',per:'',ger:'',cli:'',tec:'',tip:'',bu:'',ter:'',st:'',page:0}};
 
 const GER_FIXO=perfil.papel==='gerente'?perfil.gerente:null;
+const ADMIN=perfil.papel==='admin';
 if(GER_FIXO)S.sel.add(GER_FIXO);
 /* ================= utilidades ================= */
 const $=(s:string):any=>document.querySelector(s);
@@ -43,12 +70,14 @@ const vAno=o=>(Number(o.faturamentoServico)||0)+(Number(o.softwareAno)||0);
 const fab=o=>o.software||o.parceiro||'Não informado';
 const quarter=d=>Math.floor((+d.slice(5,7)-1)/3);
 const toast=m=>{const t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),2600);};
-const tagSt=s=>`<span class="tag ${s===WON?'win':s&&s.startsWith('Encerrada')?'lost':''}">${esc(s)}</span>`;
+const tagSt=s=>`<span class="tag ${s===WON?'win':(ST[s]?ST[s].tipo==='perdida':s&&s.startsWith('Encerrada'))?'lost':''}">${esc(s)}</span>`;
 const opts=(list,sel,all)=>(all!==undefined?`<option value="">${esc(all)}</option>`:'')+list.map(v=>`<option ${v===sel?'selected':''}>${esc(v)}</option>`).join('');
 const uniq=a=>[...new Set(a.filter(Boolean))].sort((x,y)=>String(x).localeCompare(String(y),'pt'));
 
 /* ================= recortes ================= */
-function gerentes(){return uniq([...Object.keys(S.metas),...S.opps.map(o=>o.gerente),...S.fat.map(r=>r.gerente)]).filter(g=>!HIDE_GER.has(g));}
+const inativos=()=>new Set(S.gerCad.filter(g=>g.ativo===false).map(g=>g.nome));
+function gerentesTodos(){return uniq([...S.gerCad.map(g=>g.nome),...Object.keys(S.metas),...S.opps.map(o=>o.gerente),...S.fat.map(r=>r.gerente)]).filter(g=>!HIDE_GER.has(g));}
+function gerentes(){const off=inativos();return gerentesTodos().filter(g=>!off.has(g));}
 const inSel=g=>!S.sel.size||S.sel.has(g);
 function selOpps(){return S.opps.filter(o=>inSel(o.gerente));}
 function selFat(){return S.fat.filter(r=>inSel(r.gerente));}
@@ -218,7 +247,7 @@ function renderPipeline(b){
   const all=b.opps.filter(o=>FUNNEL.includes(o.status)&&(o.fechamento||'').startsWith(b.Y));
   $('#pCli').innerHTML=opts(uniq(all.map(o=>o.cliente)),S.p.cli,'Todos os clientes');
   $('#pFab').innerHTML=opts(uniq(all.map(fab)),S.p.fab,'Todos os fabricantes');
-  $('#pArea').innerHTML=opts(AREAS,S.p.area,'Todas as áreas');
+  $('#pArea').innerHTML=opts(opcoes('area',S.p.area),S.p.area,'Todas as áreas');
   $('#pRes').value=S.p.res;
   const L=pipeFiltered(b); const won=L.filter(o=>o.status===WON), fc=L.filter(o=>OPEN.has(o.status));
   const wv=sum(won,vAno), fv=sum(fc,vAno), tot=wv+fv, saldo=b.meta-tot;
@@ -407,17 +436,160 @@ function renderFat(){
 $('#fLimpar').addEventListener('click',()=>{S.f={q:'',per:'',ger:'',cli:'',tec:'',tip:'',bu:'',ter:'',st:'',page:0};renderFat();});
 $('#fPrev').addEventListener('click',()=>{S.f.page--;renderFat();});$('#fNext').addEventListener('click',()=>{S.f.page++;renderFat();});
 
+/* ================= configurações ================= */
+function renderConfig(){
+  document.querySelectorAll('#cfgTabs button').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.cfg===S.cfg)));
+  ['etapas','gerentes','metas','listas'].forEach(k=>{$('#cfg-'+k).hidden=k!==S.cfg;});
+  const ro=!ADMIN; ['#btnNovaEtapa','#btnNovoGer','#m_save'].forEach(s=>$(s).disabled=ro);
+  ({etapas:renderEtapas,gerentes:renderGerCad,metas:renderMetasCfg,listas:renderListas})[S.cfg]();
+}
+$('#cfgTabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.cfg=b.dataset.cfg;renderConfig();});
+const usoEtapa=k=>S.opps.filter(o=>o.status===k).length;
+function renderEtapas(){
+  const ro=!ADMIN;
+  $('#tbEtapas').innerHTML=`<thead><tr><th>Ordem</th><th>Etapa</th><th>Tipo</th><th class="r">Probabilidade padrão</th><th class="r">Oportunidades</th><th>Situação</th><th></th></tr></thead><tbody>${
+    STATUS.map((s,i)=>`<tr><td><button class="ico" data-mv="${i}:-1" ${ro||i===0?'disabled':''} aria-label="Subir">↑</button> <button class="ico" data-mv="${i}:1" ${ro||i===STATUS.length-1?'disabled':''} aria-label="Descer">↓</button></td>
+      <td class="w"><b>${esc(s.k)}</b></td><td>${tagSt(s.k).replace(esc(s.k),TIPO_LBL[s.tipo]||s.tipo)}</td><td class="r">${esc(s.p)}%</td><td class="r">${nf(usoEtapa(s.k))}</td>
+      <td>${s.ativa===false?'<span class="tag off">Inativa</span>':'Ativa'}</td><td><button class="ico" data-et="${i}">Editar</button></td></tr>`).join('')}</tbody>`;
+}
+async function salvarEtapas(lista){
+  await api.salvarEtapas(lista.map(({k,p,tipo,ativa})=>({k,p,tipo,ativa:ativa!==false})),userId);
+  await recarregar('etapas');
+}
+$('#tbEtapas').addEventListener('click',async e=>{
+  const mv=e.target.closest('[data-mv]'),ed=e.target.closest('[data-et]');
+  if(mv&&ADMIN){const [i,d]=mv.dataset.mv.split(':').map(Number);const l=[...STATUS];[l[i],l[i+d]]=[l[i+d],l[i]];
+    aplicarEtapas(l);renderEtapas();try{await salvarEtapas(l);}catch(err){toast('Não foi possível salvar a ordem.');}}
+  if(ed)etapaForm(+ed.dataset.et);
+});
+$('#btnNovaEtapa').addEventListener('click',()=>etapaForm(-1));
+function etapaForm(i){
+  const isNew=i<0,e=isNew?{k:'',p:50,tipo:'aberta',ativa:true}:STATUS[i],uso=isNew?0:usoEtapa(e.k);
+  openDrawer(`<div class="card-head" style="margin:0"><h2 style="font-size:22px">${isNew?'Nova etapa':'Editar etapa'}</h2><button class="ghost" data-close>Fechar</button></div>
+    <form class="form" id="etF">
+      <label class="full">Nome da etapa<input id="e_k" required value="${esc(e.k)}" ${uso?'readonly':''}></label>
+      ${uso?`<div class="full note">${nf(uso)} oportunidade${uso>1?'s estão':' está'} nesta etapa, então o nome não pode mudar. Para tirá-la de uso, marque como inativa.</div>`:''}
+      <label>Tipo<select id="e_tipo">${Object.entries(TIPO_LBL).map(([v,l])=>`<option value="${v}" ${v===e.tipo?'selected':''}>${l}</option>`).join('')}</select></label>
+      <label>Probabilidade padrão (%)<input id="e_p" type="number" min="0" max="100" step="5" value="${esc(e.p)}"></label>
+      <label class="full" style="display:flex;gap:8px;align-items:center;flex-direction:row"><input type="checkbox" id="e_ativa" ${e.ativa!==false?'checked':''} style="width:auto"> Ativa (aparece no formulário de oportunidade)</label>
+      <div class="full err" id="e_err"></div>
+      <div class="full actions">${!isNew&&!uso?'<button type="button" class="ghost" id="e_del">Excluir etapa</button>':''}<span style="flex:1"></span><button type="button" class="ghost" data-close>Cancelar</button><button class="blue" ${ADMIN?'':'disabled'}>${isNew?'Cadastrar':'Salvar'}</button></div>
+    </form>`,()=>{
+      $('#e_del')?.addEventListener('click',async()=>{const l=STATUS.filter((_,j)=>j!==i);
+        if(!l.some(s=>s.tipo==='ganha')){$('#e_err').textContent='O funil precisa de uma etapa do tipo Ganha.';return;}
+        try{await salvarEtapas(l);closeDrawer();toast('Etapa excluída');}catch(err){writeErr(err,'#e_err');}});
+      $('#etF').addEventListener('submit',async ev=>{ev.preventDefault();if(!ADMIN)return;
+        const k=$('#e_k').value.trim(),tipo=$('#e_tipo').value,p=Math.max(0,Math.min(100,+$('#e_p').value||0)),ativa=$('#e_ativa').checked;
+        if(STATUS.some((s,j)=>j!==i&&s.k.toLowerCase()===k.toLowerCase())){$('#e_err').textContent='Já existe uma etapa com esse nome.';return;}
+        if(tipo==='ganha'&&STATUS.some((s,j)=>j!==i&&s.tipo==='ganha')){$('#e_err').textContent='Só pode haver uma etapa do tipo Ganha. Mude a atual antes.';return;}
+        const l=[...STATUS];const novo={k,p,tipo,ativa};
+        if(isNew){const pos=tipo==='aberta'?l.filter(s=>s.tipo==='aberta').length:l.length;l.splice(pos,0,novo);}else l[i]=novo;
+        if(!l.some(s=>s.tipo==='ganha')){$('#e_err').textContent='O funil precisa de uma etapa do tipo Ganha.';return;}
+        try{await salvarEtapas(l);closeDrawer();toast(isNew?'Etapa cadastrada':'Etapa salva');}catch(err){writeErr(err,'#e_err');}});});
+}
+function gerInfo(nome){return S.gerCad.find(g=>g.nome===nome)||{nome,ativo:true,_novo:true};}
+function renderGerCad(){
+  const lista=gerentesTodos().map(gerInfo).sort((a,b)=>(a.ativo===false)-(b.ativo===false)||a.nome.localeCompare(b.nome,'pt'));
+  const realY=g=>sum(S.fat.filter(r=>r.gerente===g&&r.mes.startsWith(S.ano)),r=>r.valor);
+  $('#tbGer').innerHTML=`<thead><tr><th>Gerente</th><th>E-mail</th><th>Área</th><th>Território</th><th class="r">Meta</th><th class="r">Realizado ${esc(S.ano)}</th><th class="r">Opps abertas</th><th>Situação</th><th></th></tr></thead><tbody>${
+    lista.map(g=>`<tr><td class="w"><b>${esc(g.nome)}</b>${g._novo?' <span class="note">· ainda sem cadastro</span>':''}</td><td>${esc(g.email||'—')}</td><td>${esc(g.area||'—')}</td><td>${esc(g.territorio||'—')}</td>
+      <td class="r">${S.metas[g.nome]?esc(M(S.metas[g.nome])):'—'}</td><td class="r">${esc(M(realY(g.nome)))}</td><td class="r">${nf(S.opps.filter(o=>o.gerente===g.nome&&OPEN.has(o.status)).length)}</td>
+      <td>${g.ativo===false?'<span class="tag off">Inativo</span>':'Ativo'}</td><td><button class="ico" data-ger="${esc(g.nome)}">Editar</button></td></tr>`).join('')}</tbody>`;
+}
+$('#tbGer').addEventListener('click',e=>{const b=e.target.closest('[data-ger]');if(b)gerCadForm(gerInfo(b.dataset.ger));});
+$('#btnNovoGer').addEventListener('click',()=>gerCadForm(null));
+function gerCadForm(g){
+  const isNew=!g; g=g||{nome:'',ativo:true,_novo:true};
+  const terrs=opcoes('territorio',g.territorio);
+  const areas=opcoes('area_gerente',g.area);
+  openDrawer(`<div class="card-head" style="margin:0"><h2 style="font-size:22px">${isNew?'Novo gerente de negócios':esc(g.nome)}</h2><button class="ghost" data-close>Fechar</button></div>
+    <form class="form" id="gF">
+      <label class="full">Nome (igual ao usado nas oportunidades)<input id="g_nome" required value="${esc(g.nome)}" ${isNew?'':'readonly'}></label>
+      <label class="full">E-mail<input id="g_email" type="email" value="${esc(g.email||'')}" placeholder="nome@almaviva…"></label>
+      <label>Área<select id="g_area">${opts(areas,g.area||'','')}</select></label>
+      <label>Território<select id="g_terr">${opts(terrs,g.territorio||'','')}</select></label>
+      <label>Meta ${esc(S.ano)} (R$)<input id="g_meta" type="number" min="0" step="100000" value="${esc(S.metas[g.nome]||0)}"></label>
+      <label style="display:flex;gap:8px;align-items:center;flex-direction:row;align-self:end"><input type="checkbox" id="g_ativo" ${g.ativo!==false?'checked':''} style="width:auto"> Ativo</label>
+      <div class="full note">A meta vale para o período cadastrado na aba Metas (${esc(fmtD(S.metasDoc.inicio)||'—')} a ${esc(fmtD(S.metasDoc.fim)||'—')}).</div>
+      <div class="full err" id="g_err"></div>
+      <div class="full actions"><button type="button" class="ghost" data-close>Cancelar</button><button class="blue" ${ADMIN?'':'disabled'}>${isNew?'Cadastrar':'Salvar'}</button></div>
+    </form>`,()=>{
+      $('#gF').addEventListener('submit',async ev=>{ev.preventDefault();if(!ADMIN)return;
+        const nome=$('#g_nome').value.trim(); if(!nome)return;
+        if(isNew&&gerentesTodos().some(x=>x.toLowerCase()===nome.toLowerCase())&&S.gerCad.some(x=>x.nome.toLowerCase()===nome.toLowerCase())){$('#g_err').textContent='Esse gerente já está cadastrado.';return;}
+        const data={nome,email:$('#g_email').value.trim(),area:$('#g_area').value.trim(),territorio:$('#g_terr').value.trim(),ativo:$('#g_ativo').checked};
+        const meta=Math.max(0,+$('#g_meta').value||0); const valores={...S.metas};
+        if(meta)valores[nome]=meta;else delete valores[nome];
+        try{await api.salvarGerente(data,userId);
+          if((S.metas[nome]||0)!==meta)await api.salvarMetas(+S.ano,S.metasDoc.inicio||null,S.metasDoc.fim||null,valores);
+          await recarregar('gerentes');await recarregar('metas');
+          closeDrawer();toast(isNew?'Gerente cadastrado':'Gerente salvo');}catch(err){writeErr(err,'#g_err');}});});
+}
+function renderMetasCfg(force){
+  if(S.metaDirty&&!force)return; S.metaDirty=false;
+  const d=S.metasDoc||{}; $('#m_ini').value=d.inicio||''; $('#m_fim').value=d.fim||'';
+  $('#metaFonte').textContent=`Metas de ${S.ano} (troque o ano no painel para editar outro). Gerentes inativos não aparecem aqui.${ADMIN?'':' Só administradores podem alterar.'}`;
+  const gs=uniq([...gerentes(),...Object.keys(S.metas)]).filter(g=>!inativos().has(g));
+  const ro=!ADMIN;
+  $('#tbMetas').innerHTML=`<thead><tr><th>Gerente</th><th>Área</th><th>Território</th><th class="r">Meta (R$)</th></tr></thead><tbody>${
+    gs.map(g=>{const i=gerInfo(g);return `<tr><td class="w"><b>${esc(g)}</b></td><td>${esc(i.area||'—')}</td><td>${esc(i.territorio||'—')}</td><td class="r"><input class="mini" type="number" min="0" step="100000" data-meta="${esc(g)}" value="${esc(S.metas[g]||'')}" placeholder="0" ${ro?'disabled':''}></td></tr>`;}).join('')}</tbody>`;
+  metaTot();
+}
+function metaTot(){$('#m_tot').textContent=brl(sum([...document.querySelectorAll('[data-meta]')],i=>+i.value||0));}
+$('#metaF').addEventListener('input',()=>{S.metaDirty=true;metaTot();});
+$('#m_reset').addEventListener('click',()=>renderMetasCfg(true));
+$('#metaF').addEventListener('submit',async ev=>{ev.preventDefault();if(!ADMIN)return;
+  const ini=$('#m_ini').value,fim=$('#m_fim').value;
+  if(ini&&fim&&fim<ini){$('#m_err').textContent='O fim do período precisa ser depois do início.';return;}
+  const valores={};document.querySelectorAll('[data-meta]').forEach(i=>{const v=+i.value||0;if(v)valores[i.dataset.meta]=v;});
+  Object.entries(S.metas).forEach(([g,v])=>{if(inativos().has(g))valores[g]=v;});
+  try{await api.salvarMetas(+S.ano,ini||null,fim||null,valores);S.metaDirty=false;await recarregar('metas');$('#m_err').textContent='';toast('Metas salvas');}
+  catch(err){writeErr(err,'#m_err');}});
+
+
+/* ---- listas de opções ---- */
+function usoOpcao(def,v){
+  if(def.campo)return S.opps.filter(o=>def.campo(o).includes(v)).length;
+  if(def.cli)return S.clientes.filter(c=>def.cli(c).includes(v)).length;
+  if(def.ger)return S.gerCad.filter(g=>def.ger(g).includes(v)).length;
+  return 0;}
+function renderListas(){
+  const ro=!ADMIN;
+  $('#listasGrid').innerHTML=LISTAS_DEF.map(def=>{const it=listaItens(def.id);
+    return `<div class="card lista" data-lista="${def.id}"><div class="card-head" style="margin:0"><div><h3>${esc(def.nome)}</h3><div class="sub">${esc(def.onde)} · ${it.filter(i=>i.ativo!==false).length} ativas</div></div></div>
+      <table><tbody>${it.map((i,n)=>{const u=usoOpcao(def,i.v);return `<tr><td class="w">${i.ativo===false?`<span class="tag off">${esc(i.v)}</span>`:esc(i.v)}</td><td class="r note">${u?nf(u)+' em uso':''}</td>
+        <td class="r" style="white-space:nowrap"><button class="ico" data-op="up" data-n="${n}" ${ro||n===0?'disabled':''} aria-label="Subir">↑</button><button class="ico" data-op="down" data-n="${n}" ${ro||n===it.length-1?'disabled':''} aria-label="Descer">↓</button>
+        <button class="ico" data-op="tog" data-n="${n}" ${ro?'disabled':''}>${i.ativo===false?'Ativar':'Desativar'}</button>${u?'':`<button class="ico" data-op="del" data-n="${n}" ${ro?'disabled':''} aria-label="Excluir">✕</button>`}</td></tr>`;}).join('')}</tbody></table>
+      <form class="lista-add" data-add="${def.id}"><input placeholder="Nova opção" ${ro?'disabled':''} required><button class="blue" ${ro?'disabled':''}>Adicionar</button></form></div>`;}).join('');
+}
+async function gravarLista(id,itens){
+  S.listas={...(S.listas||{}),[id]:itens}; renderListas();
+  try{await salvarLista(id,itens);}catch(err){toast('Não foi possível salvar a lista.');}
+}
+$('#listasGrid').addEventListener('click',e=>{const b=e.target.closest('[data-op]');if(!b||!ADMIN)return;
+  const id=b.closest('[data-lista]').dataset.lista,n=+b.dataset.n,it=listaItens(id).map(i=>({...i}));
+  if(b.dataset.op==='up')[it[n-1],it[n]]=[it[n],it[n-1]];
+  else if(b.dataset.op==='down')[it[n+1],it[n]]=[it[n],it[n+1]];
+  else if(b.dataset.op==='tog')it[n].ativo=it[n].ativo===false;
+  else if(b.dataset.op==='del')it.splice(n,1);
+  gravarLista(id,it);});
+$('#listasGrid').addEventListener('submit',e=>{e.preventDefault();if(!ADMIN)return;const f=e.target.closest('[data-add]');const inp=f.querySelector('input');const v=inp.value.trim();if(!v)return;
+  const id=f.dataset.add,it=listaItens(id).map(i=>({...i}));
+  if(it.some(i=>i.v.toLowerCase()===v.toLowerCase())){toast('Essa opção já existe na lista.');return;}
+  it.push({v,ativo:true});gravarLista(id,it);});
+async function salvarLista(id,itens){await api.salvarLista(id,itens);}
 /* ================= roteamento ================= */
-const VIEWS=['painel','oportunidades','clientes','faturamento'];
+const VIEWS=GER_FIXO?['painel','oportunidades','clientes','faturamento']:['painel','oportunidades','clientes','faturamento','config'];
+if(GER_FIXO)document.querySelector('#nav a[href="#config"]')?.remove();
 const cur=()=>{const h=location.hash.slice(1);return VIEWS.includes(h)?h:'painel';};
 function renderAll(){
   const v=cur(); VIEWS.forEach(n=>{$('#v-'+n).hidden=n!==v;}); $('#hero').hidden=v!=='painel';
   document.querySelectorAll('#nav a').forEach(a=>{if(a.getAttribute('href')==='#'+v)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});
   const gl=gerentes(); ['#fGerO','#fGerC'].forEach(id=>{const c=$(id).value;$(id).innerHTML=opts(gl,c,'Todos os gerentes');});
-  ({painel:renderPainel,oportunidades:renderOpps,clientes:renderClientes,faturamento:renderFat})[v]();
+  ({painel:renderPainel,oportunidades:renderOpps,clientes:renderClientes,faturamento:renderFat,config:renderConfig})[v]();
 }
 window.addEventListener('hashchange',()=>{renderAll();window.scrollTo(0,0);});
-$('#fAno').addEventListener('change',e=>{S.ano=e.target.value;renderAll();api.metas(+S.ano).then(m=>{S.metas=m;renderAll();}).catch(()=>{});});
+$('#fAno').addEventListener('change',e=>{S.ano=e.target.value;S.metaDirty=false;renderAll();recarregar('metas');});
 $('#btnLimpar').addEventListener('click',()=>{S.sel.clear();if(GER_FIXO)S.sel.add(GER_FIXO);S.ano='2026';$('#fAno').value='2026';S.p={cli:'',fab:'',area:'',res:'gp'};renderAll();});
 [['#pCli','cli'],['#pFab','fab'],['#pArea','area'],['#pRes','res']].forEach(([id,k])=>$(id).addEventListener('change',e=>{S.p[k]=e.target.value;renderPipeline(base());}));
 $('#btnLimparP').addEventListener('click',()=>{S.p={cli:'',fab:'',area:'',res:'gp'};renderPipeline(base());});
@@ -436,10 +608,10 @@ function openDrawer(html,onMount){const root=$('#drawerRoot');
   onMount&&onMount(root.querySelector('.drawer'));const f=root.querySelector('input,select,textarea');f&&f.focus();}
 function closeDrawer(){$('#drawerRoot').innerHTML='';}
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDrawer();});
-const gerForm=()=>gerentes();
+const gerForm=()=>{const c=S.gerCad.filter(g=>g.ativo!==false).map(g=>g.nome);return c.length?uniq(c):gerentes();};
 
 function oppForm(o,preCli){
-  const isNew=!o; o=o||{status:'Qualificação',probabilidade:10,gerente:S.sel.size===1?[...S.sel][0]:'',cadastro:TODAY_ISO,cliente:preCli||''};
+  const isNew=!o; o=o||{status:(STATUS.find(s=>s.open&&s.ativa!==false)||STATUS[0]).k,probabilidade:(STATUS.find(s=>s.open&&s.ativa!==false)||STATUS[0]).p,gerente:S.sel.size===1?[...S.sel][0]:'',cadastro:TODAY_ISO,cliente:preCli||''};
   const clis=S.clientes.map(c=>c.nome).sort((a,b)=>a.localeCompare(b,'pt'));
   openDrawer(`
     <div class="card-head" style="margin:0"><h2 style="font-size:22px">${isNew?'Nova oportunidade':'Oportunidade nº '+esc(o.numero)}</h2><button class="ghost" data-close>Fechar</button></div>
@@ -448,10 +620,12 @@ function oppForm(o,preCli){
       <label class="full">Oportunidade<input id="o_titulo" required value="${esc(o.titulo)}"></label>
       <label>Cliente<input id="o_cliente" list="dlCli" required value="${esc(o.cliente)}"><datalist id="dlCli">${clis.map(c=>`<option value="${esc(c)}">`).join('')}</datalist></label>
       <label>Gerente<select id="o_gerente" required><option value=""></option>${opts(gerForm(),o.gerente)}</select></label>
-      <label>Etapa<select id="o_status">${opts(STATUS.map(s=>s.k),o.status)}</select></label>
+      <label>Etapa<select id="o_status">${opts(STATUS.filter(s=>s.ativa!==false||s.k===o.status).map(s=>s.k),o.status)}</select></label>
       <label>Probabilidade (%)<input id="o_prob" type="number" min="0" max="100" step="5" value="${esc(o.probabilidade)}"></label>
-      <label>Área de negócio<select id="o_area">${opts(uniq([...AREAS,o.area]),o.area)}</select></label>
-      <label>Fabricante<input id="o_soft" value="${esc(o.software||'')}" placeholder="IBM, Google, Red Hat…"></label>
+      <label>Área de negócio<select id="o_area">${opts(opcoes('area',o.area),o.area||'','')}</select></label>
+      <label>Tipo de revenda<select id="o_rev">${opts(opcoes('revenda',o.revenda),o.revenda||'','')}</select></label>
+      <label>Fabricante<select id="o_soft">${opts(opcoes('fabricante',o.software),o.software||'','')}</select></label>
+      <label>Parceiro<select id="o_parc">${opts(opcoes('parceiro',o.parceiro),o.parceiro||'','')}</select></label>
       <label>Valor de serviço (R$)<input id="o_vs" type="number" min="0" step="1000" value="${esc(o.valorServico||0)}"></label>
       <label>Valor de software (R$)<input id="o_vsw" type="number" min="0" step="1000" value="${esc(o.valorSoftware||0)}"></label>
       <label>Faturamento de serviço no ano (R$)<input id="o_fs" type="number" min="0" step="1000" value="${esc(o.faturamentoServico||0)}"></label>
@@ -469,7 +643,7 @@ function oppForm(o,preCli){
       $('#oppF').addEventListener('submit',async e=>{e.preventDefault();if(S.readOnly)return;
         const nome=$('#o_cliente').value.trim();const c=S.clientes.find(x=>x.nome.toLowerCase()===nome.toLowerCase());
         const data={...o,titulo:$('#o_titulo').value.trim(),cliente:c?c.nome:nome,clienteId:c?c.id:slug(nome),gerente:$('#o_gerente').value,status:$('#o_status').value,
-          probabilidade:Math.max(0,Math.min(100,+$('#o_prob').value||0)),area:$('#o_area').value,software:$('#o_soft').value.trim()||null,
+          probabilidade:Math.max(0,Math.min(100,+$('#o_prob').value||0)),area:$('#o_area').value,revenda:$('#o_rev').value||null,software:$('#o_soft').value||null,parceiro:$('#o_parc').value||null,
           valorServico:+$('#o_vs').value||0,valorSoftware:+$('#o_vsw').value||0,faturamentoServico:+$('#o_fs').value||0,softwareAno:+$('#o_sa').value||0,
           cadastro:$('#o_cad').value||null,fechamento:$('#o_fech').value||null,observacoes:$('#o_obs').value.trim(),atualizadoEm:new Date().toISOString()};
         data.valorTotal=data.valorServico+data.valorSoftware;
@@ -489,7 +663,7 @@ function cliForm(c){const isNew=!c;c=c||{gerente:S.sel.size===1?[...S.sel][0]:''
     <form class="form" id="cliF">
       <label class="full">Nome<input id="c_nome" required value="${esc(c.nome)}"></label>
       <label>Gerente da conta<select id="c_ger"><option value=""></option>${opts(gerForm(),c.gerente)}</select></label>
-      <label>Segmento<select id="c_seg">${opts(['Público','Privado','Parcerias'],c.segmento)}</select></label>
+      <label>Segmento<select id="c_seg">${opts(opcoes('segmento',c.segmento),c.segmento||'','')}</select></label>
       <label>CNPJ<input id="c_cnpj" value="${esc(c.cnpj||'')}" inputmode="numeric"></label>
       <label>Contato principal<input id="c_cont" value="${esc(c.contato||'')}"></label>
       <label class="full">Nome no faturamento (siglas, separadas por vírgula)<input id="c_sig" value="${esc((c.siglasFaturamento||[]).join(', '))}"></label>
@@ -528,6 +702,10 @@ async function recarregar(qual?:string){
     if(!qual||qual==='oportunidades')S.opps=await api.oportunidades();
     if(!qual||qual==='clientes')S.clientes=await api.clientes();
     if(!qual||qual==='running_previsto')S.running=await api.running();
+    if(!qual||qual==='etapas')aplicarEtapas(await api.etapas());
+    if(!qual||qual==='gerentes')S.gerCad=await api.gerentes();
+    if(!qual||qual==='opcoes')S.listas=await api.listas();
+    if(!qual||qual==='metas'){S.metasDoc=await api.metasDetalhe(+S.ano);S.metas=S.metasDoc.valores;}
     renderAll();
   }catch(e){setStatus('Não foi possível atualizar os dados: '+(e.message||e),true);}
 }
@@ -535,8 +713,8 @@ $('#userNome').textContent=`${perfil.nome} · ${perfil.papel==='gerente'?'Gerent
 renderAll();
 (async()=>{
   try{
-    const [o,c,f,m,r]=await Promise.all([api.oportunidades(),api.clientes(),api.faturamento(),api.metas(+S.ano),api.running()]);
-    S.opps=o;S.clientes=c;S.fat=f;S.metas=m;S.running=r;
+    const [o,c,f,m,r,et,gc,ls]=await Promise.all([api.oportunidades(),api.clientes(),api.faturamento(),api.metasDetalhe(+S.ano),api.running(),api.etapas(),api.gerentes(),api.listas()]);
+    aplicarEtapas(et);S.opps=o;S.clientes=c;S.fat=f;S.metasDoc=m;S.metas=m.valores;S.running=r;S.gerCad=gc;S.listas=ls;
     setStatus(o.length?'':'Ainda não há oportunidades. Use "Nova oportunidade" para registrar a primeira.');
     renderAll();
     let t;api.aoVivo(tab=>{clearTimeout(t);t=setTimeout(()=>recarregar(tab),300);});
