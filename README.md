@@ -23,10 +23,17 @@ Padrão: o gerente vê só a própria carteira; o diretor escolhe uma ou várias
 - **Cobertura de pipeline:** pipeline aberto do período ÷ o que falta da meta (meta − realizado nas notas). Verde a partir do alvo (3x), amarelo a partir de 2/3 dele, vermelho abaixo.
 - **Selos de risco:** data vencida, adiada 2 vezes ou mais, sem atualização há 30 dias, parada na etapa (60 dias e acima de 1,5 × a média da etapa) e valor alto (R$ 1 milhão no ano) sem próximo passo nem ação aberta. Todos os limites ficam em *Configurações > Forecast e riscos*. O banco conta os adiamentos e a data de entrada na etapa por gatilho.
 - **Foto semanal do pipeline:** toda segunda às 6h o banco grava o pipeline inteiro (pg_cron); se o agendamento não estiver ativo, a foto é tirada no primeiro acesso da semana. As fotos alimentam a cascata "o que mudou" e a pauta da reunião.
-- **Relatórios:** por gerente, diretor ou área, no ano ou num quarter: indicadores (meta, realizado, Commit, Realizado + Commit, Best case, pipeline aberto, cobertura, oportunidades em risco), gráfico de previsão × meta (em R$ ou % da meta), previsão por quarter, pipeline por etapa (valor e ponderado), tabela de cobertura, cobertura por quarter, cascata "o que mudou" contra a foto da semana passada, de 4 semanas ou a primeira, e a lista de oportunidades em risco. Exporta a tabela e as oportunidades em CSV (abre no Excel).
+- **Relatórios:** por gerente, diretor, área ou fabricante (o fabricante não tem meta; o realizado vem da coluna Tecnologia do faturamento), no ano ou num quarter: indicadores (meta, realizado, Commit, Realizado + Commit, Best case, pipeline aberto, cobertura, oportunidades em risco), gráfico de previsão × meta (em R$ ou % da meta), previsão por quarter, pipeline por etapa (valor e ponderado), tabela de cobertura, cobertura por quarter, cascata "o que mudou" contra a foto da semana passada, de 4 semanas ou a primeira, e a lista de oportunidades em risco. Exporta a tabela e as oportunidades em CSV (abre no Excel).
 - **Reunião de forecast:** pauta automática (top negócios do quarter, riscos, o que mudou, ações pendentes, com botão para copiar), indicadores do gerente, gráficos 2D (padrão) ou 3D, oportunidades com categoria e selos, e o registro de **ações** por oportunidade e por gerente.
 - O diretor de cada gerente é definido em *Configurações > Gerentes de negócios*. Hoje: Cassiano (Antonio C Pereira, Marcelo Costa, Orlando Junior, Bruno Cardoso, Juliana C Ferreira), Hussem (Reginaldo C Oliveira, Bruna Hausemer, Marcus Rondon, Jefferson M Santos) e Adriano (Daniele Freire). Cassiano e Hussem também podem ter oportunidades próprias.
 - Permissões: `ver_relatorios`, `ver_reuniao` e `registrar_acoes`. Por padrão, gerentes veem Relatórios (só a própria carteira) mas não a Reunião.
+
+## Número, anexos e envio para pré-vendas
+
+- **Número da oportunidade:** gerado pelo banco ao cadastrar, sequencial, único e nunca reaproveitado (nem de oportunidade apagada). As da carga inicial mantêm o número do sistema antigo; as novas começam em 7000. Depois de cadastrar, o app mostra o número com um botão para copiar, para uso em outras áreas.
+- **Anexos:** um ou mais arquivos por oportunidade, de qualquer tipo, até 50 MB cada, no Supabase Storage (bucket privado `anexos`). Quem vê a oportunidade vê os anexos; quem anexou ou o administrador remove.
+- **Envio para pré-vendas:** na oportunidade, *Enviar para pré-vendas* manda um e-mail com os dados e os anexos escolhidos para uma pessoa da lista de *Configurações > Pré-vendas*, com cópia para o e-mail da conta de quem envia. Cada envio fica registrado na oportunidade (tabela `envios`), inclusive os que falharem.
+- O e-mail sai pela função `supabase/functions/enviar-oportunidade`, usando o [Resend](https://resend.com). Para ligar: crie a conta, verifique o domínio de e-mail da Almaviva (a TI adiciona os registros DNS que o Resend mostrar), crie uma chave e cadastre os segredos `RESEND_API_KEY` e `EMAIL_REMETENTE` (ex.: `CRM Almaviva <crm@seudominio.com.br>`) em *Supabase > Edge Functions > Secrets*. Publique a função com `supabase functions deploy enviar-oportunidade`.
 
 ## Configurações (aba do app)
 
@@ -35,6 +42,7 @@ Só quem tem a permissão Configurações vê e altera esta aba (por padrão, s�
 - **Etapas das oportunidades:** nome, ordem, tipo (Em aberto, Ganha, Perdida), probabilidade padrão e se está ativa. "Em aberto" entra no forecast, a única etapa "Ganha" entra no pipeline ganho. Uma etapa em uso não pode ser renomeada nem excluída, só desativada.
 - **Gerentes de negócios:** e-mail, área, território, meta do ano e situação. Gerentes inativos saem da seleção do painel e dos formulários.
 - **Metas:** período e meta de cada gerente para o ano escolhido no painel.
+- **Pré-vendas:** nome e e-mail de quem pode receber oportunidades enviadas pelo CRM.
 - **Forecast e riscos:** cobertura alvo, probabilidades da categoria sugerida e limites dos selos de risco.
 - **Listas de opções:** valores de cada campo de seleção (área de negócio, fabricante, parceiro, tipo de revenda, segmento do cliente, área e território do gerente). Opções desativadas somem dos formulários, mas continuam nos registros antigos.
 
@@ -48,7 +56,7 @@ Só quem tem a permissão Configurações vê e altera esta aba (por padrão, s�
 
 ## Como colocar no ar
 
-1. **Supabase.** Crie um projeto em [supabase.com](https://supabase.com), na região São Paulo. Em *SQL Editor*, rode os arquivos de `supabase/migrations/` na ordem do nome: `20261126000000_schema.sql`, `20261126010000_configuracoes.sql`, `20261126020000_acessos.sql`, `20261127000000_reuniao_forecast.sql` e `20261127010000_forecast.sql`.
+1. **Supabase.** Crie um projeto em [supabase.com](https://supabase.com), na região São Paulo. Em *SQL Editor*, rode os arquivos de `supabase/migrations/` na ordem do nome: `20261126000000_schema.sql`, `20261126010000_configuracoes.sql`, `20261126020000_acessos.sql`, `20261127000000_reuniao_forecast.sql`, `20261127010000_forecast.sql` e `20261127020000_anexos_envios.sql`.
 2. **Variáveis.** Copie `.env.example` para `.env` e preencha com os dados de *Project Settings > API*. A chave `service_role` só é usada pelo script de importação. Não a coloque no Vercel.
 3. **Carga inicial.** Rode na sua máquina, com as planilhas na pasta:
    ```bash

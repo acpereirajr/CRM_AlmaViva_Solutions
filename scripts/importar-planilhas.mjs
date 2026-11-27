@@ -144,6 +144,8 @@ if (clientes.size) {
 }
 if (opps.length) {
   await inChunks(opps, 500, async part => check(await sb.from('oportunidades').upsert(part, { onConflict: 'numero' }), 'oportunidades'));
+  // novas oportunidades do CRM continuam a numeração depois da maior importada (mínimo 7000)
+  check(await sb.rpc('ajustar_numeracao'), 'numeração');
   console.log(`Oportunidades gravadas: ${opps.length}`);
 }
 if (fat.length) {

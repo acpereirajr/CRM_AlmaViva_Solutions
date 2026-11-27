@@ -193,6 +193,53 @@ export const api = {
     }
     return fs;
   },
+  // ---- anexos (Supabase Storage, bucket privado 'anexos', pasta = número da oportunidade) ----
+  async anexos(numero: number) {
+    const { data, error } = await sb.from('anexos').select('*').eq('numero', numero).order('criado_em'); if (error) throw error;
+    return (data || []).map((a: any) => ({ id: a.id, numero: a.numero, nome: a.nome, caminho: a.caminho, tamanho: Number(a.tamanho) || 0, tipo: a.tipo,
+      criadoEm: a.criado_em, porNome: a.criado_por_nome || '' }));
+  },
+  async anexar(numero: number, f: File, userId?: string, porNome?: string) {
+    const limpo = f.name.normalize('NFKD').replace(/[^\w.\-]+/g, '_').slice(-120);
+    const caminho = `${numero}/${crypto.randomUUID()}-${limpo}`;
+    const up = await sb.storage.from('anexos').upload(caminho, f, { contentType: f.type || 'application/octet-stream', upsert: false });
+    if (up.error) throw up.error;
+    const { error } = await sb.from('anexos').insert({ numero, nome: f.name, caminho, tamanho: f.size, tipo: f.type || null, criado_por: userId ?? null, criado_por_nome: porNome || null });
+    if (error) { await sb.storage.from('anexos').remove([caminho]); throw error; }
+  },
+  async urlAnexo(caminho: string) {
+    const { data, error } = await sb.storage.from('anexos').createSignedUrl(caminho, 300); if (error) throw error; return data.signedUrl as string;
+  },
+  async removerAnexo(a: any) {
+    const { error } = await sb.from('anexos').delete().eq('id', a.id); if (error) throw error;
+    await sb.storage.from('anexos').remove([a.caminho]);
+  },
+  // ---- pré-vendas e envios ----
+  async prevendas() {
+    const { data, error } = await sb.from('prevendas').select('*').order('nome'); if (error) throw error;
+    return (data || []).map((p: any) => ({ id: p.id, nome: p.nome, email: p.email, ativo: p.ativo }));
+  },
+  async salvarPrevendas(lista: { id?: any; nome: string; email: string; ativo?: boolean }[]) {
+    for (const p of lista) {
+      const d = { nome: p.nome, email: p.email, ativo: p.ativo !== false };
+      const q = /^\d+$/.test(String(p.id ?? '')) ? sb.from('prevendas').update(d).eq('id', p.id) : sb.from('prevendas').insert(d);
+      const { error } = await q; if (error) throw error;
+    }
+  },
+  async envios(numero: number) {
+    const { data, error } = await sb.from('envios').select('*').eq('numero', numero).order('enviado_em', { ascending: false }); if (error) throw error;
+    return (data || []).map((e: any) => ({ id: e.id, numero: e.numero, prevendasId: e.prevendas_id, paraNome: e.para_nome, paraEmail: e.para_email, cc: e.cc,
+      assunto: e.assunto, anexos: e.anexos || [], status: e.status, erro: e.erro, enviadoEm: e.enviado_em, porNome: e.enviado_por_nome || '' }));
+  },
+  // o e-mail sai pela função enviar-oportunidade (supabase/functions), que usa o provedor configurado nos segredos do projeto
+  async enviarOportunidade(p: { numero: number; prevendasId: any; assunto: string; mensagem: string; anexoIds: string[] }) {
+    const { data, error } = await sb.functions.invoke('enviar-oportunidade', { body: p });
+    if (error) {
+      let msg = error.message; try { const j = await (error as any).context?.json?.(); if (j?.erro) msg = j.erro; } catch { /* sem corpo */ }
+      throw new Error(msg);
+    }
+    return data as { status: string; erro?: string };
+  },
   async gerentes() {
     const { data, error } = await sb.from('gerentes').select('*').order('nome'); if (error) throw error;
     return data || [];

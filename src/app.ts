@@ -48,7 +48,7 @@ const MESL=['janeiro','fevereiro','março','abril','maio','junho','julho','agost
 const HIDE_GER=new Set(['Sem gerente','Parcerias']);
 const TODAY=new Date(); const TODAY_ISO=TODAY.toISOString().slice(0,10);
 
-const S:any={acoes:[],rel:{per:'ano',dim:'ger',base:'semana',esc:'pct',det:null},reu:{ger:'',modo:(()=>{try{return localStorage.getItem('crm-reu-modo')==='3d'?'3d':'2d';}catch(e){return '2d';}})()},fotos:[],param:null,papeis:null,usuarios:[],areas:new Set(),listas:null,opps:[],clientes:[],fat:[],metas:{},metasDoc:{},gerCad:[],cfg:'etapas',running:{},readOnly:false,loaded:{o:false,c:false},
+const S:any={acoes:[],anexos:[],envios:[],prevendas:[],rel:{per:'ano',dim:'ger',base:'semana',esc:'pct',det:null},reu:{ger:'',modo:(()=>{try{return localStorage.getItem('crm-reu-modo')==='3d'?'3d':'2d';}catch(e){return '2d';}})()},fotos:[],param:null,papeis:null,usuarios:[],areas:new Set(),listas:null,opps:[],clientes:[],fat:[],metas:{},metasDoc:{},gerCad:[],cfg:'etapas',running:{},readOnly:false,loaded:{o:false,c:false},
   sel:new Set(),ano:'2026',p:{cli:'',fab:'',area:'',res:'gp'},sim:{pct:60,ex:false},evFab:'',
   f:{q:'',per:'',ger:'',cli:'',tec:'',tip:'',bu:'',ter:'',st:'',page:0}};
 
@@ -497,9 +497,9 @@ $('#fPrev').addEventListener('click',()=>{S.f.page--;renderFat();});$('#fNext').
 /* ================= configurações ================= */
 function renderConfig(){
   document.querySelectorAll('#cfgTabs button').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.cfg===S.cfg)));
-  ['etapas','gerentes','metas','listas','forecast','acessos'].forEach(k=>{$('#cfg-'+k).hidden=k!==S.cfg;});
+  ['etapas','gerentes','metas','listas','forecast','prevendas','acessos'].forEach(k=>{$('#cfg-'+k).hidden=k!==S.cfg;});
   const ro=!ADMIN; ['#btnNovaEtapa','#btnNovoGer','#m_save'].forEach(s=>$(s).disabled=ro);
-  ({etapas:renderEtapas,gerentes:renderGerCad,metas:renderMetasCfg,listas:renderListas,forecast:renderParamCfg,acessos:renderAcessos})[S.cfg]();
+  ({etapas:renderEtapas,gerentes:renderGerCad,metas:renderMetasCfg,listas:renderListas,forecast:renderParamCfg,prevendas:renderPrevendas,acessos:renderAcessos})[S.cfg]();
 }
 $('#cfgTabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.cfg=b.dataset.cfg;renderConfig();});
 const usoEtapa=k=>S.opps.filter(o=>o.status===k).length;
@@ -712,7 +712,11 @@ async function salvarUsuario(u){await api.salvarUsuario(u);await recarregar('usu
 const QL=['1º tri','2º tri','3º tri','4º tri'];
 const QC=['Q1','Q2','Q3','Q4'];
 const diretorDe=g=>(S.gerCad.find(x=>x.nome===g)||{}).diretor||'Sem diretor';
-const DIMS={ger:{t:'gerente',T:'Gerente',f:o=>o.gerente,fg:g=>g},dir:{t:'diretor',T:'Diretor',f:o=>diretorDe(o.gerente),fg:g=>diretorDe(g)},area:{t:'área',T:'Área',f:o=>areaDe(o.gerente),fg:g=>areaDe(g)}};
+const DIMS={ger:{t:'gerente',T:'Gerente',f:o=>o.gerente,fg:g=>g},dir:{t:'diretor',T:'Diretor',f:o=>diretorDe(o.gerente),fg:g=>diretorDe(g)},area:{t:'área',T:'Área',f:o=>areaDe(o.gerente),fg:g=>areaDe(g)},
+  fab:{t:'fabricante',T:'Fabricante',f:o=>fab(o),fo:o=>fab(o),fr:r=>fabFat(r.tecnologia),fg:null}};
+// fabricante no faturamento: a coluna TECNOLOGIA, casada com a lista de fabricantes sem diferença de maiúsculas e espaços
+const normFab=s=>String(s||'').normalize('NFKD').replace(/[^A-Za-z0-9]/g,'').toUpperCase();
+function fabFat(t){if(!String(t||'').trim())return 'Não informado';const n=normFab(t),c=[...opcoes('fabricante'),...S.opps.map(o=>o.software).filter(Boolean)].find(x=>normFab(x)===n);return c||String(t).trim();}
 const fcAno=()=>S.opps.filter(o=>inSel(o.gerente)&&OPEN.has(o.status)&&(o.fechamento||'').startsWith(S.ano));
 const medida=(a,m)=>m==='n'?a.length:m==='p'?sum(a,o=>vAno(o)*(Number(o.probabilidade)||0)/100):sum(a,vAno);
 const fmtMed=(v,m)=>m==='n'?nf(v):M(v);
@@ -794,11 +798,11 @@ function mudancas(foto,P,fg){
 // ---- linhas de forecast por visão ----
 const PER_L=P=>P==='ano'?S.ano:QC[+P]+' de '+S.ano;
 function linhasFc(P,D){
-  const kf=DIMS[D].fg,R={},row=k=>R[k]=R[k]||{k,meta:0,real:0,Commit:0,'Best case':0,Pipeline:0,aberto:0,pond:0,n:0,nc:0,riscos:0,vRisco:0,opps:[]};
+  const dd=DIMS[D],kf=dd.fg,kfo=dd.fo||(o=>kf(o.gerente)),kfr=dd.fr||(r=>kf(r.gerente)),R={},row=k=>R[k]=R[k]||{k,meta:0,real:0,Commit:0,'Best case':0,Pipeline:0,aberto:0,pond:0,n:0,nc:0,riscos:0,vRisco:0,opps:[]};
   const fm=P==='ano'?1:.25;
-  gerSel().filter(g=>!HIDE_GER.has(g)).forEach(g=>{const m=S.metas[g]||0;if(m)row(kf(g)).meta+=m*fm;});
-  selFat().forEach(r=>{if(inPer(r.mes+'-01',P))row(kf(r.gerente)).real+=r.valor;});
-  selOpps().forEach(o=>{if(!OPEN.has(o.status)||!inPer(o.fechamento,P))return;const x=row(kf(o.gerente)),v=vAno(o),c=catDe(o);
+  if(kf)gerSel().filter(g=>!HIDE_GER.has(g)).forEach(g=>{const m=S.metas[g]||0;if(m)row(kf(g)).meta+=m*fm;});
+  selFat().forEach(r=>{if(inPer(r.mes+'-01',P))row(kfr(r)).real+=r.valor;});
+  selOpps().forEach(o=>{if(!OPEN.has(o.status)||!inPer(o.fechamento,P))return;const x=row(kfo(o)),v=vAno(o),c=catDe(o);
     x[c]+=v;x.aberto+=v;x.pond+=v*(Number(o.probabilidade)||0)/100;x.n++;if(c==='Commit')x.nc++;x.opps.push(o);if(riscos(o).length){x.riscos++;x.vRisco+=v;}});
   return Object.values(R).map(x=>({...x,gap:Math.max(0,x.meta-x.real),prev:x.real+x.Commit,cob:x.meta-x.real>0?x.aberto/(x.meta-x.real):null}))
     .sort((a,b)=>b.meta-a.meta||b.aberto+b.real-a.aberto-a.real);}
@@ -848,7 +852,7 @@ function renderRelatorios(){
   $('#rDim').hidden=!!GER_FIXO;
   const gsv=filtrando()?gerSel():[];
   $('#rVisao').innerHTML=GER_FIXO?`Sua carteira: <b>${esc(GER_FIXO)}</b>.`:!filtrando()?'Todos os gerentes que você enxerga. Para filtrar, escolha áreas ou gerentes no <a href="#painel">Painel</a>.':`Seleção do Painel: ${S.areas.size?`áreas <b>${esc([...S.areas].join(', '))}</b>, `:''}<b>${gsv.length}</b> gerente${gsv.length===1?'':'s'}.`;
-  const L=linhasFc(P,D),T=totalFc(L),pm=x=>x.meta?Math.min(100,x/T.meta*100):0,ci=cobInfo(T);
+  const L=linhasFc(P,D),T=totalFc(linhasFc(P,'ger')),pm=x=>x.meta?Math.min(100,x/T.meta*100):0,ci=cobInfo(T);
   $('#rKpis').innerHTML=[
     ['Meta '+PER_L(P),T.meta?M(T.meta):'—',P==='ano'?'Soma das metas dos gerentes':'¼ da meta anual',100,''],
     ['Realizado',M(T.real),T.meta?pct(T.real,T.meta)+' da meta (notas emitidas)':'Notas emitidas',pm(T.real),''],
@@ -859,10 +863,10 @@ function renderRelatorios(){
     ['Cobertura',ci.v,T.meta?(T.cob===null?'O realizado já cobre a meta':`Pipeline ÷ o que falta (${M(T.gap)}). Alvo ${nf(param().coberturaAlvo,1)}x · ${ci.t}`):'Seleção sem meta',T.cob===null?100:Math.min(100,(T.cob||0)/param().coberturaAlvo*100),ci.c],
     ['Em risco',nf(T.riscos),`${M(T.vRisco)} do pipeline com algum selo de risco`,T.aberto?T.vRisco/T.aberto*100:0,T.riscos?'warn':'']]
     .map(([l,v,s,w,c])=>`<div class="kpi kpi-${c}" style="--w:${Math.max(0,w||0).toFixed(1)}%"><span class="l">${esc(l)}</span><span class="v">${esc(v)}</span><span class="s">${esc(s)}</span></div>`).join('');
-  $('#rMetaTit').textContent=`Previsão x meta por ${dt.t} · ${PER_L(P)}`;
-  setSeg('#rEsc',S.rel.esc);grFcMeta($('#rChMeta'),L,x=>{S.rel.det={k:x.k};renderRelDet();rolarDet();},S.rel.esc==='pct');
+  $('#rMetaTit').textContent=D==='fab'?`Previsão por fabricante · ${PER_L(P)}`:`Previsão x meta por ${dt.t} · ${PER_L(P)}`;
+  setSeg('#rEsc',S.rel.esc);$('#rEsc').hidden=D==='fab';grFcMeta($('#rChMeta'),L,x=>{S.rel.det={k:x.k};renderRelDet();rolarDet();},S.rel.esc==='pct'&&D!=='fab');
   // por quarter (sempre o ano inteiro)
-  const Q=[0,1,2,3].map(q=>totalFc(linhasFc(String(q),D)));
+  const Q=[0,1,2,3].map(q=>totalFc(linhasFc(String(q),'ger')));
   $('#rQSub').textContent=`Seleção inteira em ${S.ano}. Meta do quarter = ¼ da meta anual. Clique num quarter para filtrar a tela.`;
   grFcQuarter($('#rChQ'),Q,i=>{S.rel.per=String(i);S.rel.det=null;renderRelatorios();});
   grEtapas($('#rChEt'),P);
@@ -921,8 +925,8 @@ function renderCascata(P){
 function rolarDet(){$('#rDetCard').scrollIntoView({behavior:'smooth',block:'start'});}
 function renderRelDet(){
   const det=S.rel.det,card=$('#rDetCard'); if(!det){card.hidden=true;return;} card.hidden=false;
-  const P=det.q!==undefined?String(det.q):S.rel.per,kf=DIMS[S.rel.dim].fg;
-  const a=selOpps().filter(o=>OPEN.has(o.status)&&inPer(o.fechamento,P)&&kf(o.gerente)===det.k).sort((x,y)=>vAno(y)-vAno(x));
+  const P=det.q!==undefined?String(det.q):S.rel.per,dd=DIMS[S.rel.dim],kf=dd.fo||(o=>dd.fg(o.gerente));
+  const a=selOpps().filter(o=>OPEN.has(o.status)&&inPer(o.fechamento,P)&&kf(o)===det.k).sort((x,y)=>vAno(y)-vAno(x));
   $('#rDetTit').textContent=`${det.k} · ${PER_L(P)}: ${nf(a.length)} oportunidade${a.length===1?'':'s'} abertas · ${M(sum(a,vAno))}`;
   $('#rDet').innerHTML=`<thead><tr><th>Nº</th><th>Fechamento</th><th>Gerente</th><th>Cliente</th><th>Oportunidade</th><th>Etapa</th><th>Categoria</th><th class="r">Valor no ano</th><th class="r">Prob.</th><th>Riscos</th></tr></thead><tbody>${
     a.map(o=>`<tr class="click" data-opp="${esc(o.id)}"><td>${esc(o.numero)}</td><td>${esc(fmtD(o.fechamento))}</td><td>${esc(o.gerente)}</td><td class="w">${esc(o.cliente)}</td><td class="w">${esc(o.titulo)}</td><td>${tagSt(o.status)}</td><td>${catTag(o)}</td><td class="r">${esc(M(vAno(o)))}</td><td class="r">${esc(o.probabilidade)}%</td><td class="selos">${selos(o)}</td></tr>`).join('')||'<tr><td colspan="10" class="note">Nenhuma oportunidade aberta.</td></tr>'}</tbody>`;
@@ -1104,6 +1108,113 @@ async function salvarParam(v){await api.salvarParametros(v,userId);await recarre
 function baixarBlob(nome,txt){const u=URL.createObjectURL(new Blob([txt],{type:nome.endsWith('.csv')?'text/csv;charset=utf-8':'text/plain;charset=utf-8'}));
   const a=document.createElement('a');a.href=u;a.download=nome;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000);}
 async function baixar(nome,txt){baixarBlob(nome,txt);}
+/* ================= número, anexos e envio para pré-vendas ================= */
+// Número da oportunidade: sequencial, único, nunca reaproveitado. As da carga inicial mantêm o número do sistema antigo; as novas começam em 7000.
+const NUM_INICIAL=7000;
+async function copiar(t,ok){try{await navigator.clipboard.writeText(t);toast(ok||'Copiado');return;}catch(err){}
+  const ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();
+  let r=false;try{r=document.execCommand('copy');}catch(e){}ta.remove();toast(r?(ok||'Copiado'):'Não foi possível copiar. Número: '+t);}
+function numeroCriado(o){
+  openDrawer(`<div class="card-head" style="margin:0"><div><span class="eyebrow">Oportunidade cadastrada</span><h2 style="font-size:20px">${esc(o.cliente||'')}</h2></div><button class="ghost" data-close>Fechar</button></div>
+    <div class="num-grande"><span class="note">Número da oportunidade</span><b>Nº ${esc(o.numero)}</b></div>
+    <p class="note" style="margin:0">Use este número para falar desta oportunidade com outras áreas, inclusive as que ainda não usam o CRM. Ele é único, não muda e não é reaproveitado.</p>
+    <div class="actions" style="justify-content:flex-start"><button id="nCopiar">Copiar número</button><button class="blue" id="nAbrir">Abrir a oportunidade</button></div>`,d=>{
+    d.querySelector('#nCopiar').addEventListener('click',()=>copiar(String(o.numero),`Número ${o.numero} copiado`));
+    d.querySelector('#nAbrir').addEventListener('click',()=>oppForm(S.opps.find(x=>String(x.numero)===String(o.numero))||{...o,id:String(o.numero)}));});
+  toast(`Oportunidade nº ${o.numero} cadastrada`);}
+const tam=b=>{b=Number(b)||0;return b>=1048576?nf(b/1048576,1)+' MB':b>=1024?nf(b/1024,0)+' KB':nf(b)+' B';};
+const fmtDH=s=>s?new Date(s).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'';
+const nomeAutor=()=>{const u=usuarioAtual();return u.nome||(papeisAtuais()[u.papel]||{}).nome||'';};
+const anexosDe=n=>S.anexos.filter(a=>String(a.numero)===String(n)).sort((a,b)=>String(a.criadoEm).localeCompare(String(b.criadoEm)));
+const enviosDe=n=>S.envios.filter(e=>String(e.numero)===String(n)).sort((a,b)=>String(b.enviadoEm).localeCompare(String(a.enviadoEm)));
+const prevendasAtivos=()=>(S.prevendas||[]).filter(p=>p.ativo!==false&&p.email);
+const ST_ENVIO={enviado:['good','E-mail enviado'],registrado:['warn','Registrado (o protótipo não envia e-mail)'],erro:['bad','Falhou']};
+function renderExtras(o){const box=$('#oExtra');if(!box)return;S.extraOpp=o;const pd=pode('editar_oportunidades')&&!S.readOnly;
+  const an=anexosDe(o.numero),ev=enviosDe(o.numero);
+  box.innerHTML=`<div class="card-head" style="margin:0"><div><h3>Anexos</h3><div class="sub">${esc(ANEXO_NOTA)}</div></div>${pd?'<label class="btn-file">Anexar arquivos<input type="file" id="o_files" multiple></label>':''}</div>
+    <ul class="anexos">${an.map(a=>`<li><a href="#" data-anexo="${esc(a.id)}"><span class="ext">${esc((a.nome.split('.').pop()||'').slice(0,4).toUpperCase())}</span>${esc(a.nome)}</a><span class="note">${esc(tam(a.tamanho))} · ${esc(a.porNome||'')} em ${esc(fmtD(dia(a.criadoEm)))}</span>${pd?`<button type="button" class="ico" data-anexo-del="${esc(a.id)}" aria-label="Remover ${esc(a.nome)}">✕</button>`:''}</li>`).join('')||'<li class="note">Nenhum arquivo anexado.</li>'}</ul>
+    <div class="err" id="o_ferr">${esc(S.extraErr||'')}</div>
+    <div class="card-head" style="margin:16px 0 0"><div><h3>Envios para pré-vendas</h3><div class="sub">A pessoa escolhida recebe a oportunidade e os anexos por e-mail, e você recebe uma cópia.</div></div>${pd?'<button type="button" class="blue" id="o_enviar">Enviar para pré-vendas</button>':''}</div>
+    <ul class="envios">${ev.map(e=>{const s=ST_ENVIO[e.status]||['',e.status];return `<li><div><b>${esc(fmtDH(e.enviadoEm))}</b> · ${esc(e.porNome||'')} → ${esc(e.paraNome)} &lt;${esc(e.paraEmail)}&gt;</div><span class="note">Cópia para ${esc(e.cc||'—')} · ${nf((e.anexos||[]).length)} anexo${(e.anexos||[]).length===1?'':'s'} · <span class="cob ${s[0]}">${esc(s[1])}</span>${e.erro?' · '+esc(e.erro):''}</span></li>`;}).join('')||'<li class="note">Nenhum envio ainda.</li>'}</ul>`;
+  const fi=box.querySelector('#o_files');if(fi)fi.addEventListener('change',async()=>{const fs=[...fi.files];if(!fs.length)return;fi.disabled=true;$('#o_ferr').textContent='Enviando '+fs.length+' arquivo'+(fs.length>1?'s':'')+'…';
+    S.extraErr='';try{const r=await anexar(o,fs);S.extraErr=r.erros.join(' ');if(r.ok)toast(`${r.ok} arquivo${r.ok>1?'s':''} anexado${r.ok>1?'s':''}`);}catch(err){S.extraErr='Não foi possível anexar: '+(err&&err.message||'tente de novo.');}
+    finally{fi.disabled=false;fi.value='';await carregarExtras(o);}});
+  box.querySelectorAll('[data-anexo]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();const x=an.find(y=>String(y.id)===a.dataset.anexo);x&&abrirAnexo(x);}));
+  box.querySelectorAll('[data-anexo-del]').forEach(b=>b.addEventListener('click',async()=>{const x=an.find(y=>String(y.id)===b.dataset.anexoDel);if(!x)return;
+    if(b.dataset.conf!=='1'){b.dataset.conf='1';b.textContent='Remover?';b.classList.add('danger');setTimeout(()=>{if(b.isConnected){b.dataset.conf='';b.textContent='✕';b.classList.remove('danger');}},4000);return;}
+    S.extraErr='';try{await removerAnexo(x);toast('Anexo removido');}catch(err){S.extraErr='Não foi possível remover: '+(err&&err.message||'');}await carregarExtras(o);}));
+  const be=box.querySelector('#o_enviar');if(be)be.addEventListener('click',()=>envioForm(o));}
+function corpoEnvio(o,nome){return `Olá${nome?', '+nome.split(' ')[0]:''},
+
+Segue a oportunidade nº ${o.numero} para análise de pré-vendas.
+
+Cliente: ${o.cliente||''}
+Oportunidade: ${o.titulo||''}
+Gerente: ${o.gerente||''}
+Etapa: ${o.status||''} (${o.probabilidade??0}%)${OPEN.has(o.status)?' · '+catDe(o):''}
+Valor total: ${brl(o.valorTotal||0)} · no ano: ${brl(vAno(o))}
+Fechamento previsto: ${fmtD(o.fechamento)||'—'}
+Fabricante / parceiro: ${[o.software,o.parceiro].filter(Boolean).join(' / ')||'—'}
+Próximo passo: ${o.proximoPasso||'—'}${o.observacoes?'\n\nObservações: '+o.observacoes:''}
+
+Atenciosamente,
+${nomeAutor()}`;}
+function envioForm(o){const pv=prevendasAtivos(),an=anexosDe(o.numero),u=usuarioAtual();
+  openDrawer(`<div class="card-head" style="margin:0"><div><span class="eyebrow">Enviar para pré-vendas</span><h2 style="font-size:20px">Nº ${esc(o.numero)} · ${esc(o.cliente)}</h2></div><button class="ghost" data-close>Fechar</button></div>
+    ${pv.length?'':'<div class="banner warn">Nenhuma pessoa de pré-vendas cadastrada. O administrador cadastra em Configurações > Pré-vendas.</div>'}
+    <form class="form" id="envF">
+      <label class="full">Para (pré-vendas)<select id="e_para" required><option value=""></option>${pv.map(p=>`<option value="${esc(p.id)}">${esc(p.nome)} · ${esc(p.email)}</option>`).join('')}</select></label>
+      <label class="full">Cópia para o seu e-mail corporativo<input id="e_cc" type="email" required value="${esc(u.email||'')}" ${ENVIO_REAL?'readonly':''} placeholder="voce@almaviva..."></label>
+      <label class="full">Assunto<input id="e_ass" required maxlength="200" value="${esc(`Oportunidade nº ${o.numero} · ${o.cliente||''} · ${o.titulo||''}`)}"></label>
+      <label class="full">Mensagem<textarea id="e_msg" rows="12">${esc(corpoEnvio(o,''))}</textarea></label>
+      <div class="full"><span class="lbl">Anexos</span>${an.length?an.map(a=>`<label class="chk"><input type="checkbox" value="${esc(a.id)}" checked> ${esc(a.nome)} <span class="note">${esc(tam(a.tamanho))}</span></label>`).join(''):'<p class="note" style="margin:4px 0 0">Nenhum anexo. Se precisar, anexe os arquivos na oportunidade antes de enviar.</p>'}</div>
+      <div class="full note">${esc(ENVIO_NOTA)}</div><div class="full err" id="e_err"></div>
+      <div class="full actions"><button type="button" class="ghost" id="e_voltar">Voltar para a oportunidade</button><button class="blue" ${pv.length?'':'disabled'}>Enviar</button></div>
+    </form>`,d=>{
+    d.querySelector('#e_voltar').addEventListener('click',()=>oppForm(o));
+    d.querySelector('#e_para').addEventListener('change',e=>{const p=pv.find(x=>String(x.id)===e.target.value),m=d.querySelector('#e_msg');if(p&&/^Olá[^\n]*\n/.test(m.value))m.value=m.value.replace(/^Olá[^\n]*\n/,`Olá, ${p.nome.split(' ')[0]},\n`);});
+    d.querySelector('#envF').addEventListener('submit',async e=>{e.preventDefault();const p=pv.find(x=>String(x.id)===d.querySelector('#e_para').value);if(!p)return;
+      const btn=d.querySelector('#envF button.blue'),ids=[...d.querySelectorAll('.chk input:checked')].map(c=>c.value);
+      const env={prevendasId:p.id,paraNome:p.nome,paraEmail:p.email,cc:d.querySelector('#e_cc').value.trim(),assunto:d.querySelector('#e_ass').value.trim(),mensagem:d.querySelector('#e_msg').value,
+        anexoIds:ids,anexos:an.filter(a=>ids.includes(String(a.id))).map(a=>a.nome)};
+      btn.disabled=true;btn.textContent='Enviando…';d.querySelector('#e_err').textContent='';
+      try{const r=await enviar(o,env);await carregarExtras(o);
+        if(r.status==='erro'){d.querySelector('#e_err').textContent='O e-mail não saiu: '+(r.erro||'erro no envio')+'. O envio ficou registrado como falho.';btn.disabled=false;btn.textContent='Tentar de novo';return;}
+        aposEnvio(o,env,r);}
+      catch(err){d.querySelector('#e_err').textContent='Não foi possível enviar: '+(err&&err.message||'tente de novo.');btn.disabled=false;btn.textContent='Enviar';}});});}
+// ---- Configurações > Pré-vendas ----
+function renderPrevendas(){const L=S.prevendas||[],ro=!ADMIN;
+  $('#tbPrev').innerHTML=`<thead><tr><th>Nome</th><th>E-mail</th><th>Situação</th><th></th></tr></thead><tbody>${
+    L.map((p,i)=>`<tr><td><b>${esc(p.nome)}</b></td><td>${esc(p.email)}</td><td>${p.ativo===false?'<span class="tag off">Inativo</span>':'<span class="tag win">Ativo</span>'}</td>      <td class="r">${ro?'':`<button class="ico" data-prev-ed="${i}">Editar</button>`}</td></tr>`).join('')||'<tr><td colspan="4" class="note">Ninguém cadastrado. Use "Nova pessoa" para cadastrar quem recebe as oportunidades.</td></tr>'}</tbody>`;
+  $('#btnNovoPrev').disabled=ro;}
+function prevForm(i){const L=S.prevendas||[],p=i==null?{nome:'',email:'',ativo:true}:L[i];
+  openDrawer(`<div class="card-head" style="margin:0"><h2 style="font-size:22px">${i==null?'Nova pessoa de pré-vendas':'Editar pré-vendas'}</h2><button class="ghost" data-close>Fechar</button></div>
+    <form class="form" id="prevF"><label class="full">Nome<input id="p_nome" required value="${esc(p.nome)}"></label><label class="full">E-mail corporativo<input id="p_email" type="email" required value="${esc(p.email)}"></label>
+      <label class="full chk"><input type="checkbox" id="p_ativo" ${p.ativo!==false?'checked':''}> Ativo (aparece na lista de envio)</label>
+      <div class="full err" id="p_err"></div><div class="full actions"><button type="button" class="ghost" data-close>Cancelar</button><button class="blue">Salvar</button></div></form>`,d=>{
+    d.querySelector('#prevF').addEventListener('submit',async e=>{e.preventDefault();if(!ADMIN)return;
+      const n={...p,nome:$('#p_nome').value.trim(),email:$('#p_email').value.trim().toLowerCase(),ativo:$('#p_ativo').checked};
+      if(L.some((x,j)=>j!==i&&x.email.toLowerCase()===n.email)){$('#p_err').textContent='Esse e-mail já está cadastrado.';return;}
+      if(!n.id)n.id=Date.now().toString(36);
+      const nova=i==null?[...L,n]:L.map((x,j)=>j===i?n:x);
+      try{await salvarPrevendas(nova);closeDrawer();toast('Pré-vendas salvo');}catch(err){$('#p_err').textContent='Não foi possível salvar: '+(err&&err.message||'');}});});}
+$('#btnNovoPrev').addEventListener('click',()=>prevForm(null));
+$('#tbPrev').addEventListener('click',e=>{const b=e.target.closest('[data-prev-ed]');if(b)prevForm(+b.dataset.prevEd);});
+
+// ---- produção: arquivos no Supabase Storage, e-mail pela função enviar-oportunidade ----
+const ENVIO_REAL=true;
+const ANEXO_NOTA='Qualquer tipo de arquivo, até 50 MB cada.';
+const ENVIO_NOTA='O CRM envia o e-mail com os anexos para a pessoa escolhida, com cópia para o e-mail da sua conta, e registra o envio aqui.';
+async function anexar(o,files){const r={ok:0,erros:[]};
+  for(const f of files){if(f.size>50*1048576){r.erros.push(`${f.name}: maior que 50 MB.`);continue;}
+    try{await api.anexar(o.numero,f,userId,nomeAutor());r.ok++;}catch(err){r.erros.push(`${f.name}: ${err&&err.message||'não foi possível enviar'}.`);}}
+  return r;}
+async function abrirAnexo(a){try{const u=await api.urlAnexo(a.caminho);window.open(u,'_blank','noopener');}catch(err){toast('Não foi possível abrir o arquivo.');}}
+async function removerAnexo(a){await api.removerAnexo(a);}
+async function carregarExtras(o){try{const [a,e]=await Promise.all([api.anexos(o.numero),api.envios(o.numero)]);S.anexos=a;S.envios=e;}catch(err){}renderExtras(o);}
+async function enviar(o,e){return api.enviarOportunidade({numero:o.numero,prevendasId:e.prevendasId,assunto:e.assunto,mensagem:e.mensagem,anexoIds:e.anexoIds});}
+function aposEnvio(o,e){toast(`E-mail enviado para ${e.paraNome}, com cópia para você`);oppForm(S.opps.find(x=>String(x.numero)===String(o.numero))||o);}
+async function salvarPrevendas(l){await api.salvarPrevendas(l);S.prevendas=await api.prevendas();renderAll();}
 /* ================= roteamento ================= */
 const cur=()=>{const h=location.hash.slice(1);return VIEWS.includes(h)?h:(VIEWS[0]||null);};
 function renderAll(){
@@ -1140,7 +1251,7 @@ function oppForm(o,preCli){
   const isNew=!o; const ro=S.readOnly||!(isNew?pode('criar_oportunidades'):pode('editar_oportunidades')); o=o||{status:(STATUS.find(s=>s.open&&s.ativa!==false)||STATUS[0]).k,probabilidade:(STATUS.find(s=>s.open&&s.ativa!==false)||STATUS[0]).p,gerente:S.sel.size===1?[...S.sel][0]:'',cadastro:TODAY_ISO,cliente:preCli||''};
   const clis=S.clientes.map(c=>c.nome).sort((a,b)=>a.localeCompare(b,'pt'));
   openDrawer(`
-    <div class="card-head" style="margin:0"><h2 style="font-size:22px">${isNew?'Nova oportunidade':'Oportunidade nº '+esc(o.numero)}</h2><button class="ghost" data-close>Fechar</button></div>
+    <div class="card-head" style="margin:0"><h2 style="font-size:22px">${isNew?'Nova oportunidade':'Oportunidade nº '+esc(o.numero)+` <button type="button" class="ghost num-copy" data-copiar-num="${esc(o.numero)}">Copiar nº</button>`}</h2><button class="ghost" data-close>Fechar</button></div>
     ${ro?'<div class="banner warn">Você pode ver, mas não editar, esta oportunidade.</div>':''}
     <form class="form" id="oppF">
       <label class="full">Oportunidade<input id="o_titulo" required value="${esc(o.titulo)}"></label>
@@ -1164,7 +1275,9 @@ function oppForm(o,preCli){
       <label class="full">Observações<textarea id="o_obs">${esc(o.observacoes||'')}</textarea></label>
       <div class="full note" id="o_total"></div><div class="full err" id="o_err"></div>
       <div class="full actions"><button type="button" class="ghost" data-close>Cancelar</button><button class="blue" ${ro?'disabled':''}>${isNew?'Cadastrar':'Salvar alterações'}</button></div>
-    </form>`,d=>{
+    </form>${isNew?'<p class="note" style="margin:0">O número da oportunidade é gerado ao cadastrar. Depois de cadastrar, você pode anexar arquivos e enviar para pré-vendas.</p>':'<section class="opp-extra" id="oExtra"></section>'}`,d=>{
+      if(!isNew){S.extraErr='';renderExtras(o);carregarExtras(o);}
+      const bc=d.querySelector('[data-copiar-num]');if(bc)bc.addEventListener('click',()=>copiar(bc.dataset.copiarNum,`Número ${bc.dataset.copiarNum} copiado`));
       const tot=()=>{$('#o_total').textContent=`Valor total: ${brl((+$('#o_vs').value||0)+(+$('#o_vsw').value||0))} · Valor no ano (usado no forecast): ${brl((+$('#o_fs').value||0)+(+$('#o_sa').value||0))}`;};
       ['#o_vs','#o_vsw','#o_fs','#o_sa'].forEach(s=>$(s).addEventListener('input',tot));tot();
       $('#o_status').addEventListener('change',e=>{$('#o_prob').value=ST[e.target.value]?.p??$('#o_prob').value;});
@@ -1186,7 +1299,7 @@ function oppForm(o,preCli){
         if(isNew){delete data.numero;data.origem='crm';}
         delete data.id;
         try{ if(!c)await api.salvarCliente({id:data.clienteId,nome,gerente:data.gerente,segmento:'',siglasFaturamento:[],origem:'crm'},userId);
-          const salvo=await api.salvarOpp(data,userId);await recarregar();closeDrawer();toast(isNew?`Oportunidade nº ${salvo.numero} cadastrada`:'Alterações salvas');}
+          const salvo=await api.salvarOpp(data,userId);await recarregar();if(isNew)numeroCriado(salvo);else{closeDrawer();toast('Alterações salvas');}}
         catch(err){writeErr(err,'#o_err');}
       });});
 }
@@ -1243,6 +1356,7 @@ async function recarregar(qual?:string){
     if(!qual||qual==='opcoes')S.listas=await api.listas();
     if(!qual||qual==='papeis')S.papeis=await api.papeis();
     if(!qual||qual==='parametros')S.param=await api.parametros();
+    if(!qual||qual==='prevendas')S.prevendas=await api.prevendas();
     if(!qual||qual==='fotos_pipeline')S.fotos=await api.fotos(TODAY_ISO);
     if((!qual||qual==='acoes')&&(pode('ver_reuniao')||pode('registrar_acoes'))){S.acoes=await api.acoes();aposAcoes();}
     if(ADMIN&&(!qual||qual==='usuarios'||qual==='perfis'||qual==='convites'))S.usuarios=await api.usuarios();
@@ -1255,8 +1369,8 @@ mostrarNome();
 renderAll();
 (async()=>{
   try{
-    const [o,c,f,m,r,et,gc,ls,pp,pr]=await Promise.all([api.oportunidades(),api.clientes(),api.faturamento(),api.metasDetalhe(+S.ano),api.running(),api.etapas(),api.gerentes(),api.listas(),api.papeis(),api.parametros()]);
-    aplicarEtapas(et);S.opps=o;S.clientes=c;S.fat=f;S.metasDoc=m;S.metas=m.valores;S.running=r;S.gerCad=gc;S.listas=ls;S.papeis=pp;S.param=pr;aplicarAcesso();mostrarNome();if(pode('ver_reuniao')||pode('registrar_acoes'))S.acoes=await api.acoes().catch(()=>[]);if(ADMIN)S.usuarios=await api.usuarios().catch(()=>[]);
+    const [o,c,f,m,r,et,gc,ls,pp,pr,pv]=await Promise.all([api.oportunidades(),api.clientes(),api.faturamento(),api.metasDetalhe(+S.ano),api.running(),api.etapas(),api.gerentes(),api.listas(),api.papeis(),api.parametros(),api.prevendas()]);
+    aplicarEtapas(et);S.opps=o;S.clientes=c;S.fat=f;S.metasDoc=m;S.metas=m.valores;S.running=r;S.gerCad=gc;S.listas=ls;S.papeis=pp;S.param=pr;S.prevendas=pv;aplicarAcesso();mostrarNome();if(pode('ver_reuniao')||pode('registrar_acoes'))S.acoes=await api.acoes().catch(()=>[]);if(ADMIN)S.usuarios=await api.usuarios().catch(()=>[]);
     setStatus(o.length?'':'Ainda não há oportunidades. Use "Nova oportunidade" para registrar a primeira.');
     renderAll();
     // foto semanal: o banco tira toda segunda (pg_cron); se ainda não houver a da semana, pede agora

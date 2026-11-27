@@ -212,7 +212,7 @@
     <div class="card-head" style="margin:0;flex-wrap:wrap;gap:10px"><div><span class="eyebrow">Forecast</span><h2>Relatórios</h2></div>
       <div class="toolbar"><label class="note">Ano <select id="rAno"></select></label>
         <div class="seg" id="rPer" role="group" aria-label="Período"><button data-v="ano">Ano</button><button data-v="0">Q1</button><button data-v="1">Q2</button><button data-v="2">Q3</button><button data-v="3">Q4</button></div>
-        <div class="seg" id="rDim" role="group" aria-label="Visão"><button data-v="ger">Gerente</button><button data-v="dir">Diretor</button><button data-v="area">Área</button></div></div></div>
+        <div class="seg" id="rDim" role="group" aria-label="Visão"><button data-v="ger">Gerente</button><button data-v="dir">Diretor</button><button data-v="area">Área</button><button data-v="fab">Fabricante</button></div></div></div>
     <div class="banner" id="rVisao" style="margin-top:12px"></div>
     <div class="grid g4" id="rKpis"></div>
     <div class="card"><div class="card-head" style="margin:0"><div><h3 id="rMetaTit"></h3><div class="sub">Realizado (notas emitidas) + Commit + Best case + Pipeline contra a meta (marca vermelha). Clique numa barra para ver as oportunidades.</div></div><div class="seg" id="rEsc" role="group" aria-label="Escala"><button data-v="valor">R$</button><button data-v="pct">% da meta</button></div></div><div id="rChMeta" class="ec"></div></div>
@@ -254,6 +254,7 @@
       <button data-cfg="metas" role="tab">Metas</button>
       <button data-cfg="listas" role="tab">Listas de opções</button>
       <button data-cfg="forecast" role="tab">Forecast e riscos</button>
+      <button data-cfg="prevendas" role="tab">Pré-vendas</button>
       <button data-cfg="acessos" role="tab">Usuários e acessos</button>
     </div>
     <div id="cfg-etapas" class="cfg-pane card" style="padding:0">
@@ -285,6 +286,10 @@
       <div class="card-head" style="margin:0"><div><h3>Forecast e riscos</h3><div class="sub">Limites da categoria sugerida, da cobertura de pipeline e dos selos de risco. Valem para todo o CRM.</div></div></div>
       <form id="parF"><div id="parGrid"></div><div class="err" id="par_err"></div>
         <div class="actions"><button type="button" class="ghost" id="par_reset">Voltar ao padrão</button><button class="blue" id="par_save">Salvar limites</button></div></form>
+    </div>
+    <div id="cfg-prevendas" class="cfg-pane card" style="padding:0" hidden>
+      <div class="card-head" style="padding:18px 18px 0"><div><h3>Pré-vendas</h3><div class="sub">Quem pode receber oportunidades enviadas de dentro do CRM. Inativos saem da lista de envio, mas o histórico fica.</div></div><button class="blue" id="btnNovoPrev">Nova pessoa</button></div>
+      <div class="scroll"><table id="tbPrev"></table></div>
     </div>
     <div id="cfg-acessos" class="cfg-pane" hidden>
       <div class="card" style="padding:0">
