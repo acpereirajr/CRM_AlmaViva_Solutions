@@ -46,8 +46,9 @@ const LISTAS_PADRAO={
   origem:[{v:'Fabricante'},{v:'Edital Publicado'},{v:'Gerente de Conta',det:'gerente'},{v:'Diretor',det:'diretor'},{v:'Evento X'},{v:'Evento Y'}]};
 const listaItens=id=>(S.listas&&S.listas[id])||LISTAS_PADRAO[id].map(v=>typeof v==='string'?{v,ativo:true}:{ativo:true,...v});
 // Origem da oportunidade: algumas origens pedem um detalhe (qual gerente, qual diretor...). Configurável em Listas de opções.
-const DET_ORIGEM={'':'Nada',gerente:'Qual gerente',diretor:'Qual diretor',fabricante:'Qual fabricante',texto:'Texto livre'};
-const origemDet=v=>(listaItens('origem').find(i=>i.v===v)||{}).det||'';
+const DET_ORIGEM={gerente:'Qual gerente indicou',diretor:'Qual diretor indicou'};
+// só Gerente de Conta (qual gerente) e Diretor (qual diretor) pedem o segundo campo
+const origemDet=v=>{const d=(listaItens('origem').find(i=>i.v===v)||{}).det;return DET_ORIGEM[d]?d:'';};
 const origemTxt=o=>o.origemOpp?o.origemOpp+(o.origemDet?' · '+o.origemDet:''):'';
 function detOpcoes(t,atual){const a=t==='gerente'?gerForm():t==='diretor'?uniq([...opcoes('diretor'),...S.gerCad.map(g=>g.diretor).filter(Boolean)]):t==='fabricante'?opcoes('fabricante'):[];
   return atual&&!a.includes(atual)?[...a,atual]:a;}
@@ -632,7 +633,7 @@ function renderListas(){
   const ro=!ADMIN;
   $('#listasGrid').innerHTML=LISTAS_DEF.map(def=>{const it=listaItens(def.id);
     return `<div class="card lista" data-lista="${def.id}"><div class="card-head" style="margin:0"><div><h3>${esc(def.nome)}</h3><div class="sub">${esc(def.onde)} · ${it.filter(i=>i.ativo!==false).length} ativas</div></div></div>
-      <table><tbody>${it.map((i,n)=>{const u=usoOpcao(def,i.v);return `<tr><td class="w">${S.listaEd&&S.listaEd.id===def.id&&S.listaEd.n===n?`<form class="lista-ren" data-ren="${def.id}" data-n="${n}"><input value="${esc(i.v)}" required aria-label="Novo nome"><button class="blue">Salvar</button><button type="button" class="ghost" data-op="cancel">Cancelar</button></form>`:(i.ativo===false?`<span class="tag off">${esc(i.v)}</span>`:esc(i.v))}${def.det?`<div class="note">Pede também: <select data-det="${n}" ${ro?'disabled':''}>${Object.entries(DET_ORIGEM).map(([k,l])=>`<option value="${k}" ${(i.det||'')===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div>`:''}</td><td class="r note">${u?nf(u)+' em uso':''}</td>
+      <table><tbody>${it.map((i,n)=>{const u=usoOpcao(def,i.v);return `<tr><td class="w">${S.listaEd&&S.listaEd.id===def.id&&S.listaEd.n===n?`<form class="lista-ren" data-ren="${def.id}" data-n="${n}"><input value="${esc(i.v)}" required aria-label="Novo nome"><button class="blue">Salvar</button><button type="button" class="ghost" data-op="cancel">Cancelar</button></form>`:(i.ativo===false?`<span class="tag off">${esc(i.v)}</span>`:esc(i.v))}${def.det&&DET_ORIGEM[i.det]?`<div class="note">Abre o campo "${esc(DET_ORIGEM[i.det])}"</div>`:''}</td><td class="r note">${u?nf(u)+' em uso':''}</td>
         <td class="r" style="white-space:nowrap"><button class="ico" data-op="up" data-n="${n}" ${ro||n===0?'disabled':''} aria-label="Subir">↑</button><button class="ico" data-op="down" data-n="${n}" ${ro||n===it.length-1?'disabled':''} aria-label="Descer">↓</button>
         <button class="ico" data-op="ren" data-n="${n}" ${ro?'disabled':''}>Editar</button><button class="ico" data-op="tog" data-n="${n}" ${ro?'disabled':''}>${i.ativo===false?'Ativar':'Desativar'}</button>${u?'':`<button class="ico" data-op="del" data-n="${n}" ${ro?'disabled':''} aria-label="Excluir">✕</button>`}</td></tr>`;}).join('')}</tbody></table>
       <form class="lista-add" data-add="${def.id}"><input placeholder="Nova opção" ${ro?'disabled':''} required><button class="blue" ${ro?'disabled':''}>Adicionar</button></form></div>`;}).join('');

@@ -1,10 +1,10 @@
 -- CRM AlmaViva Solutions: origem da oportunidade e team members (especialistas)
 -- Rode depois de 20261127020000_anexos_envios.sql.
 
--- Opção de lista pode pedir um detalhe ao ser escolhida (usado na Origem: qual gerente, qual diretor...)
+-- Origem: Gerente de Conta pede qual gerente indicou e Diretor pede qual diretor indicou; as demais não pedem nada
 alter table public.opcoes add column if not exists detalhe text;
 do $$ begin
-  alter table public.opcoes add constraint opcoes_detalhe_chk check (detalhe in ('gerente','diretor','fabricante','texto'));
+  alter table public.opcoes add constraint opcoes_detalhe_chk check (detalhe in ('gerente','diretor'));
 exception when duplicate_object then null; end $$;
 
 -- Oportunidade: origem (lista 'origem'), o detalhe da origem e os team members (lista 'team')
