@@ -24,9 +24,11 @@ const TIPO_LBL={aberta:'Em aberto',ganha:'Ganha',perdida:'Perdida'};
 // Listas de opções dos campos de seleção. A tela Configurações > Listas de opções edita os valores.
 const LISTAS_DEF=[
   {id:'area',nome:'Área de negócio',onde:'Oportunidade',campo:o=>String(o.area||'').split(',').map(s=>s.trim())},
-  {id:'fabricante',nome:'Fabricante',onde:'Oportunidade',campo:o=>[o.software]},
+  {id:'fabricante',nome:'Fabricante',onde:'Oportunidade',campo:o=>[o.software],ren:'software'},
   {id:'parceiro',nome:'Parceiro',onde:'Oportunidade',campo:o=>String(o.parceiro||'').split(',').map(s=>s.trim())},
-  {id:'revenda',nome:'Tipo de revenda',onde:'Oportunidade',campo:o=>[o.revenda]},
+  {id:'revenda',nome:'Tipo de revenda',onde:'Oportunidade',campo:o=>[o.revenda],ren:'revenda'},
+  {id:'origem',nome:'Origem da oportunidade',onde:'Oportunidade',campo:o=>[o.origemOpp],ren:'origemOpp',det:true},
+  {id:'team',nome:'Team members (especialistas)',onde:'Oportunidade',campo:o=>o.team||[],ren:'team'},
   {id:'segmento',nome:'Segmento',onde:'Cliente',cli:c=>[c.segmento]},
   {id:'area_gerente',nome:'Área do gerente',onde:'Gerente de negócios',ger:g=>[g.area]},
   {id:'territorio',nome:'Território',onde:'Gerente de negócios',ger:g=>[g.territorio]},
@@ -39,8 +41,16 @@ const LISTAS_PADRAO={
   segmento:['Público','Privado','Parcerias'],
   area_gerente:['Público','Privado','Parcerias'],
   territorio:['PRODESP','PUBLICO','PRIVADO','RJ','DF','PARCERIAS'],
-  diretor:[]};
-const listaItens=id=>(S.listas&&S.listas[id])||LISTAS_PADRAO[id].map(v=>({v,ativo:true}));
+  diretor:[],
+  team:[],
+  origem:[{v:'Fabricante'},{v:'Edital Publicado'},{v:'Gerente de Conta',det:'gerente'},{v:'Diretor',det:'diretor'},{v:'Evento X'},{v:'Evento Y'}]};
+const listaItens=id=>(S.listas&&S.listas[id])||LISTAS_PADRAO[id].map(v=>typeof v==='string'?{v,ativo:true}:{ativo:true,...v});
+// Origem da oportunidade: algumas origens pedem um detalhe (qual gerente, qual diretor...). Configurável em Listas de opções.
+const DET_ORIGEM={'':'Nada',gerente:'Qual gerente',diretor:'Qual diretor',fabricante:'Qual fabricante',texto:'Texto livre'};
+const origemDet=v=>(listaItens('origem').find(i=>i.v===v)||{}).det||'';
+const origemTxt=o=>o.origemOpp?o.origemOpp+(o.origemDet?' · '+o.origemDet:''):'';
+function detOpcoes(t,atual){const a=t==='gerente'?gerForm():t==='diretor'?uniq([...opcoes('diretor'),...S.gerCad.map(g=>g.diretor).filter(Boolean)]):t==='fabricante'?opcoes('fabricante'):[];
+  return atual&&!a.includes(atual)?[...a,atual]:a;}
 // opções ativas da lista, mantendo o valor atual do registro mesmo que inativo ou fora da lista
 const opcoes=(id,atual)=>{const a=listaItens(id).filter(i=>i.ativo!==false).map(i=>i.v);return atual&&!a.includes(atual)?[...a,atual]:a;};
 const MES=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -436,11 +446,13 @@ function renderOpps(){
   $('#oppVisao').innerHTML=GER_FIXO?`Sua carteira: <b>${esc(GER_FIXO)}</b>`:!filtrando()?'Mostrando <b>todos os gerentes</b>. Para filtrar, escolha gerentes ou áreas no <a href="#painel">Painel</a>.':
     `Mostrando ${S.areas.size?`áreas <b>${esc([...S.areas].join(', '))}</b>, `:''}${gsv.length===1?'gerente':`${gsv.length} gerentes`} <b>${esc(gsv.length<=4?gsv.join(', '):gsv.slice(0,4).join(', ')+'…')}</b>. Escolha outros no <a href="#painel">Painel</a>.`;
   let a=S.opps.filter(o=>inSel(o.gerente)&&(st==='abertas'?OPEN.has(o.status):st==='ganhas'?o.status===WON:true));
-  if(q)a=a.filter(o=>[o.cliente,o.titulo,o.numero,o.software,o.parceiro,o.gerente].join(' ').toLowerCase().includes(q));
+  const tmv=$('#fTeam').value,tms=uniq([...opcoes('team'),...S.opps.flatMap(o=>o.team||[])]).sort((x,y)=>x.localeCompare(y,'pt'));
+  $('#fTeam').innerHTML=opts(tms,tmv,'Todos os team members');$('#fTeam').hidden=!tms.length;if(tmv)a=a.filter(o=>(o.team||[]).includes(tmv));
+  if(q)a=a.filter(o=>[o.cliente,o.titulo,o.numero,o.software,o.parceiro,o.gerente,o.origemOpp,...(o.team||[])].join(' ').toLowerCase().includes(q));
   a=[...a].sort((x,y)=>(x.fechamento||'9').localeCompare(y.fechamento||'9'));
   $('#oppCount').textContent=`${a.length} oportunidades · total ${M(sum(a,o=>o.valorTotal))} · no ano ${M(sum(a,vAno))}`;
   $('#tbOpp').innerHTML=`<thead><tr><th>Nº</th><th>Fechamento</th><th>Gerente</th><th>Cliente</th><th>Fabricante</th><th>Oportunidade</th><th>Área</th><th>Etapa</th><th class="r">Valor total</th><th class="r">Valor no ano</th><th class="r">Prob.</th></tr></thead><tbody>`+
-    a.map(o=>`<tr class="click" data-opp="${esc(o.id)}"><td><b>${esc(o.numero)}</b></td><td>${esc(mesAno(o.fechamento))}</td><td>${esc(o.gerente)}</td><td class="w"><b>${esc(o.cliente)}</b></td><td>${esc(fab(o))}</td><td class="w">${esc(o.titulo)}</td><td class="w">${esc(o.area||'')}</td><td>${tagSt(o.status)} ${catTag(o)}${(n=>n?` <span class="selo s-venc" title="${esc(riscos(o).map(r=>r.l).join(' · '))}">${n} risco${n>1?'s':''}</span>`:'')(riscos(o).length)}</td><td class="r"><b>${esc(brl(o.valorTotal))}</b></td><td class="r">${esc(brl(vAno(o)))}</td><td class="r">${esc(o.probabilidade)}%</td></tr>`).join('')+'</tbody>';
+    a.map(o=>`<tr class="click" data-opp="${esc(o.id)}"><td><b>${esc(o.numero)}</b></td><td>${esc(mesAno(o.fechamento))}</td><td>${esc(o.gerente)}</td><td class="w"><b>${esc(o.cliente)}</b></td><td>${esc(fab(o))}</td><td class="w">${esc(o.titulo)}${(o.team||[]).length?`<div class="note">Team: ${esc(o.team.join(', '))}</div>`:''}</td><td class="w">${esc(o.area||'')}</td><td>${tagSt(o.status)} ${catTag(o)}${(n=>n?` <span class="selo s-venc" title="${esc(riscos(o).map(r=>r.l).join(' · '))}">${n} risco${n>1?'s':''}</span>`:'')(riscos(o).length)}</td><td class="r"><b>${esc(brl(o.valorTotal))}</b></td><td class="r">${esc(brl(vAno(o)))}</td><td class="r">${esc(o.probabilidade)}%</td></tr>`).join('')+'</tbody>';
 }
 
 /* ================= clientes ================= */
@@ -616,9 +628,9 @@ function renderListas(){
   const ro=!ADMIN;
   $('#listasGrid').innerHTML=LISTAS_DEF.map(def=>{const it=listaItens(def.id);
     return `<div class="card lista" data-lista="${def.id}"><div class="card-head" style="margin:0"><div><h3>${esc(def.nome)}</h3><div class="sub">${esc(def.onde)} · ${it.filter(i=>i.ativo!==false).length} ativas</div></div></div>
-      <table><tbody>${it.map((i,n)=>{const u=usoOpcao(def,i.v);return `<tr><td class="w">${i.ativo===false?`<span class="tag off">${esc(i.v)}</span>`:esc(i.v)}</td><td class="r note">${u?nf(u)+' em uso':''}</td>
+      <table><tbody>${it.map((i,n)=>{const u=usoOpcao(def,i.v);return `<tr><td class="w">${S.listaEd&&S.listaEd.id===def.id&&S.listaEd.n===n?`<form class="lista-ren" data-ren="${def.id}" data-n="${n}"><input value="${esc(i.v)}" required aria-label="Novo nome"><button class="blue">Salvar</button><button type="button" class="ghost" data-op="cancel">Cancelar</button></form>`:(i.ativo===false?`<span class="tag off">${esc(i.v)}</span>`:esc(i.v))}${def.det?`<div class="note">Pede também: <select data-det="${n}" ${ro?'disabled':''}>${Object.entries(DET_ORIGEM).map(([k,l])=>`<option value="${k}" ${(i.det||'')===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div>`:''}</td><td class="r note">${u?nf(u)+' em uso':''}</td>
         <td class="r" style="white-space:nowrap"><button class="ico" data-op="up" data-n="${n}" ${ro||n===0?'disabled':''} aria-label="Subir">↑</button><button class="ico" data-op="down" data-n="${n}" ${ro||n===it.length-1?'disabled':''} aria-label="Descer">↓</button>
-        <button class="ico" data-op="tog" data-n="${n}" ${ro?'disabled':''}>${i.ativo===false?'Ativar':'Desativar'}</button>${u?'':`<button class="ico" data-op="del" data-n="${n}" ${ro?'disabled':''} aria-label="Excluir">✕</button>`}</td></tr>`;}).join('')}</tbody></table>
+        <button class="ico" data-op="ren" data-n="${n}" ${ro?'disabled':''}>Editar</button><button class="ico" data-op="tog" data-n="${n}" ${ro?'disabled':''}>${i.ativo===false?'Ativar':'Desativar'}</button>${u?'':`<button class="ico" data-op="del" data-n="${n}" ${ro?'disabled':''} aria-label="Excluir">✕</button>`}</td></tr>`;}).join('')}</tbody></table>
       <form class="lista-add" data-add="${def.id}"><input placeholder="Nova opção" ${ro?'disabled':''} required><button class="blue" ${ro?'disabled':''}>Adicionar</button></form></div>`;}).join('');
 }
 async function gravarLista(id,itens){
@@ -627,15 +639,29 @@ async function gravarLista(id,itens){
 }
 $('#listasGrid').addEventListener('click',e=>{const b=e.target.closest('[data-op]');if(!b||!ADMIN)return;
   const id=b.closest('[data-lista]').dataset.lista,n=+b.dataset.n,it=listaItens(id).map(i=>({...i}));
+  if(b.dataset.op==='ren'){S.listaEd={id,n};renderListas();const i=document.querySelector('#listasGrid [data-ren] input');if(i){i.focus();i.select();}return;}
+  if(b.dataset.op==='cancel'){S.listaEd=null;renderListas();return;}
   if(b.dataset.op==='up')[it[n-1],it[n]]=[it[n],it[n-1]];
   else if(b.dataset.op==='down')[it[n+1],it[n]]=[it[n],it[n+1]];
   else if(b.dataset.op==='tog')it[n].ativo=it[n].ativo===false;
   else if(b.dataset.op==='del')it.splice(n,1);
   gravarLista(id,it);});
-$('#listasGrid').addEventListener('submit',e=>{e.preventDefault();if(!ADMIN)return;const f=e.target.closest('[data-add]');const inp=f.querySelector('input');const v=inp.value.trim();if(!v)return;
+$('#listasGrid').addEventListener('change',e=>{const sl=e.target.closest('[data-det]');if(!sl||!podeCfg())return;
+  const id=sl.closest('[data-lista]').dataset.lista,n=+sl.dataset.det,it=listaItens(id).map(i=>({...i}));if(sl.value)it[n].det=sl.value;else delete it[n].det;gravarLista(id,it);});
+$('#listasGrid').addEventListener('submit',e=>{e.preventDefault();if(!ADMIN)return;const fr=e.target.closest('[data-ren]');if(fr){renomearItem(fr.dataset.ren,+fr.dataset.n,fr.querySelector('input').value.trim());return;}const f=e.target.closest('[data-add]');const inp=f.querySelector('input');const v=inp.value.trim();if(!v)return;
   const id=f.dataset.add,it=listaItens(id).map(i=>({...i}));
   if(it.some(i=>i.v.toLowerCase()===v.toLowerCase())){toast('Essa opção já existe na lista.');return;}
   it.push({v,ativo:true});gravarLista(id,it);});
+// Renomear uma opção: nas listas da oportunidade (fabricante, tipo de revenda, origem) as oportunidades que usavam o nome antigo passam para o novo.
+const temValor=(o,campo,v)=>Array.isArray(o[campo])?o[campo].includes(v):o[campo]===v;
+async function renomearItem(id,n,v){const def=LISTAS_DEF.find(d=>d.id===id),it=listaItens(id).map(i=>({...i})),de=it[n]&&it[n].v;if(!v||!de)return;
+  if(v===de){S.listaEd=null;renderListas();return;}
+  if(it.some((i,k)=>k!==n&&i.v.toLowerCase()===v.toLowerCase())){toast('Essa opção já existe na lista.');return;}
+  const q=def.ren?S.opps.filter(o=>temValor(o,def.ren,de)).length:0,uso=usoOpcao(def,de);it[n].v=v;S.listaEd=null;await gravarLista(id,it);
+  if(q){try{await renomearEmOpps(def.ren,de,v);toast(`Opção renomeada. ${nf(q)} oportunidade${q===1?'':'s'} atualizada${q===1?'':'s'}.`);}catch(err){toast('A lista foi salva, mas não foi possível atualizar as oportunidades.');}}
+  else if(uso&&!def.ren)toast('Opção renomeada. Os registros que já usavam o nome antigo continuam com ele.');}
+const podeCfg=()=>ADMIN;
+async function renomearEmOpps(campo,de,para){await api.renomearOpcaoOpps(campo,de,para);await recarregar();}
 async function salvarLista(id,itens){await api.salvarLista(id,itens);}
 
 /* ---- usuários e acessos ---- */
@@ -713,7 +739,8 @@ const QL=['1º tri','2º tri','3º tri','4º tri'];
 const QC=['Q1','Q2','Q3','Q4'];
 const diretorDe=g=>(S.gerCad.find(x=>x.nome===g)||{}).diretor||'Sem diretor';
 const DIMS={ger:{t:'gerente',T:'Gerente',f:o=>o.gerente,fg:g=>g},dir:{t:'diretor',T:'Diretor',f:o=>diretorDe(o.gerente),fg:g=>diretorDe(g)},area:{t:'área',T:'Área',f:o=>areaDe(o.gerente),fg:g=>areaDe(g)},
-  fab:{t:'fabricante',T:'Fabricante',f:o=>fab(o),fo:o=>fab(o),fr:r=>fabFat(r.tecnologia),fg:null}};
+  fab:{t:'fabricante',T:'Fabricante',f:o=>fab(o),fo:o=>fab(o),fr:r=>fabFat(r.tecnologia),fg:null},
+  orig:{t:'origem',T:'Origem',f:o=>o.origemOpp||'Não informada',fo:o=>o.origemOpp||'Não informada',fg:null,ganhas:true}};
 // fabricante no faturamento: a coluna TECNOLOGIA, casada com a lista de fabricantes sem diferença de maiúsculas e espaços
 const normFab=s=>String(s||'').normalize('NFKD').replace(/[^A-Za-z0-9]/g,'').toUpperCase();
 function fabFat(t){if(!String(t||'').trim())return 'Não informado';const n=normFab(t),c=[...opcoes('fabricante'),...S.opps.map(o=>o.software).filter(Boolean)].find(x=>normFab(x)===n);return c||String(t).trim();}
@@ -801,7 +828,9 @@ function linhasFc(P,D){
   const dd=DIMS[D],kf=dd.fg,kfo=dd.fo||(o=>kf(o.gerente)),kfr=dd.fr||(r=>kf(r.gerente)),R={},row=k=>R[k]=R[k]||{k,meta:0,real:0,Commit:0,'Best case':0,Pipeline:0,aberto:0,pond:0,n:0,nc:0,riscos:0,vRisco:0,opps:[]};
   const fm=P==='ano'?1:.25;
   if(kf)gerSel().filter(g=>!HIDE_GER.has(g)).forEach(g=>{const m=S.metas[g]||0;if(m)row(kf(g)).meta+=m*fm;});
-  selFat().forEach(r=>{if(inPer(r.mes+'-01',P))row(kfr(r)).real+=r.valor;});
+  // origem não existe no faturamento: o realizado é o valor no ano das oportunidades ganhas no período
+  if(dd.ganhas)selOpps().forEach(o=>{if(o.status===WON&&inPer(o.fechamento,P))row(kfo(o)).real+=vAno(o);});
+  else selFat().forEach(r=>{if(inPer(r.mes+'-01',P))row(kfr(r)).real+=r.valor;});
   selOpps().forEach(o=>{if(!OPEN.has(o.status)||!inPer(o.fechamento,P))return;const x=row(kfo(o)),v=vAno(o),c=catDe(o);
     x[c]+=v;x.aberto+=v;x.pond+=v*(Number(o.probabilidade)||0)/100;x.n++;if(c==='Commit')x.nc++;x.opps.push(o);if(riscos(o).length){x.riscos++;x.vRisco+=v;}});
   return Object.values(R).map(x=>({...x,gap:Math.max(0,x.meta-x.real),prev:x.real+x.Commit,cob:x.meta-x.real>0?x.aberto/(x.meta-x.real):null}))
@@ -863,13 +892,13 @@ function renderRelatorios(){
     ['Cobertura',ci.v,T.meta?(T.cob===null?'O realizado já cobre a meta':`Pipeline ÷ o que falta (${M(T.gap)}). Alvo ${nf(param().coberturaAlvo,1)}x · ${ci.t}`):'Seleção sem meta',T.cob===null?100:Math.min(100,(T.cob||0)/param().coberturaAlvo*100),ci.c],
     ['Em risco',nf(T.riscos),`${M(T.vRisco)} do pipeline com algum selo de risco`,T.aberto?T.vRisco/T.aberto*100:0,T.riscos?'warn':'']]
     .map(([l,v,s,w,c])=>`<div class="kpi kpi-${c}" style="--w:${Math.max(0,w||0).toFixed(1)}%"><span class="l">${esc(l)}</span><span class="v">${esc(v)}</span><span class="s">${esc(s)}</span></div>`).join('');
-  $('#rMetaTit').textContent=D==='fab'?`Previsão por fabricante · ${PER_L(P)}`:`Previsão x meta por ${dt.t} · ${PER_L(P)}`;
-  setSeg('#rEsc',S.rel.esc);$('#rEsc').hidden=D==='fab';grFcMeta($('#rChMeta'),L,x=>{S.rel.det={k:x.k};renderRelDet();rolarDet();},S.rel.esc==='pct'&&D!=='fab');
+  $('#rMetaTit').textContent=!dt.fg?`Previsão por ${dt.t} · ${PER_L(P)}${dt.ganhas?' · realizado = oportunidades ganhas no CRM':''}`:`Previsão x meta por ${dt.t} · ${PER_L(P)}`;
+  setSeg('#rEsc',S.rel.esc);$('#rEsc').hidden=!dt.fg;grFcMeta($('#rChMeta'),L,x=>{S.rel.det={k:x.k};renderRelDet();rolarDet();},S.rel.esc==='pct'&&!!dt.fg);
   // por quarter (sempre o ano inteiro)
   const Q=[0,1,2,3].map(q=>totalFc(linhasFc(String(q),'ger')));
   $('#rQSub').textContent=`Seleção inteira em ${S.ano}. Meta do quarter = ¼ da meta anual. Clique num quarter para filtrar a tela.`;
   grFcQuarter($('#rChQ'),Q,i=>{S.rel.per=String(i);S.rel.det=null;renderRelatorios();});
-  grEtapas($('#rChEt'),P);
+  grEtapas($('#rChEt'),P);grOrigens(P);
   // tabela principal
   $('#rTabTit').textContent=`Cobertura e previsão por ${dt.t} · ${PER_L(P)}`;
   $('#rTabSub').textContent=`Cobertura = pipeline aberto ÷ o que falta da meta. Verde a partir de ${nf(param().coberturaAlvo,1)}x, amarelo a partir de ${nf(param().coberturaAlvo*2/3,1)}x. Clique numa linha para ver as oportunidades.`;
@@ -903,6 +932,25 @@ function grEtapas(el,P){const T=ecTema(),a=selOpps().filter(o=>OPEN.has(o.status
     xAxis:{type:'category',data:et.map(e=>e.k),...T.cAxis,axisLabel:{color:T.fg,fontSize:11,interval:0,formatter:(v,i)=>`${v}\n${et[i].p}% · ${et[i].a.length}`}},yAxis:T.vAxis,
     series:[{name:'Valor no ano',type:'bar',barGap:'8%',barWidth:'30%',data:et.map(e=>medida(e.a,'v')),itemStyle:{color:corS('Best case'),borderRadius:[4,4,0,0]}},
       {name:'Ponderado',type:'bar',barWidth:'30%',data:et.map(e=>medida(e.a,'p')),itemStyle:{color:corS('Commit'),borderRadius:[4,4,0,0]}}]});}
+// Origem das oportunidades: pipeline aberto e resultado (ganhas x perdidas) por origem, na seleção e no período
+function grOrigens(P){const T=ecTema(),nome=o=>o.origemOpp||'Não informada';
+  const ab=selOpps().filter(o=>OPEN.has(o.status)&&inPer(o.fechamento,P)),fe=selOpps().filter(o=>!OPEN.has(o.status)&&inPer(o.fechamento,P));
+  const A=uniq([...opcoes('origem'),...ab.map(nome),...fe.map(nome)]).map(k=>({k,a:ab.filter(o=>nome(o)===k),g:fe.filter(o=>nome(o)===k&&o.status===WON),p:fe.filter(o=>nome(o)===k&&o.status!==WON)})).filter(x=>x.a.length||x.g.length||x.p.length);
+  const ni=A.find(x=>x.k==='Não informada'),tot=ab.length+fe.length;
+  $('#rOrigSub').textContent=`${PER_L(P)}. Oportunidades sem origem aparecem como "Não informada"${ni&&tot?` (${nf(ni.a.length+ni.g.length+ni.p.length)} de ${nf(tot)} neste período; a origem passou a existir em 27/11/2026)`:''}. Clique numa barra do pipeline para ver as oportunidades.`;
+  const A1=[...A].filter(x=>x.a.length).sort((x,y)=>medida(x.a,'v')-medida(y.a,'v')),A2=[...A].filter(x=>x.g.length||x.p.length).sort((x,y)=>medida(x.g,'v')-medida(y.g,'v'));
+  const conv=x=>x.g.length+x.p.length?x.g.length/(x.g.length+x.p.length)*100:0,vazio=(el,t)=>{const ec=window.echarts&&window.echarts.getInstanceByDom(el);if(ec)ec.dispose();el.style.height='auto';el.innerHTML=`<div class="vazio">${t}</div>`;};
+  const elA=$('#rChOrA'),elB=$('#rChOrB');
+  if(!A1.length)vazio(elA,'Nenhuma oportunidade aberta com fechamento neste período.');else{elA.innerHTML='';elA.style.height=Math.max(220,60+A1.length*38)+'px';
+    grafico(elA,{textStyle:T.textStyle,grid:{left:8,right:70,top:12,bottom:8,containLabel:true},tooltip:{...T.tooltip,trigger:'axis',axisPointer:{type:'shadow'},formatter:ps=>{const x=A1[ps[0].dataIndex];return `<b>${esc(x.k)}</b><div style="min-width:200px;margin-top:4px">${linhaTip(corS('Best case'),'Valor no ano',M(medida(x.a,'v')))}${linhaTip(corS('Commit'),'Ponderado',M(medida(x.a,'p')))}${linhaTip('','Oportunidades',nf(x.a.length))}</div>`;}},
+      xAxis:T.vAxis,yAxis:{type:'category',data:A1.map(x=>x.k),...T.cAxis,axisLabel:{color:T.fg,fontSize:12}},
+      series:[{name:'Valor no ano',type:'bar',barWidth:'55%',data:A1.map(x=>medida(x.a,'v')),itemStyle:{color:corS('Best case'),borderRadius:[0,4,4,0]},label:{show:true,position:'right',color:T.mu,fontSize:11,formatter:p=>`${nf(A1[p.dataIndex].a.length)} opp.`}}]},
+      p=>{S.rel.dim='orig';S.rel.det={k:A1[p.dataIndex].k};renderRelatorios();rolarDet();});}
+  if(!A2.length)vazio(elB,'Nenhuma oportunidade ganha ou perdida com fechamento neste período.');else{elB.innerHTML='';elB.style.height=Math.max(220,90+A2.length*38)+'px';
+    grafico(elB,{textStyle:T.textStyle,legend:{...T.legend,data:['Ganhas','Perdidas']},grid:{left:8,right:70,top:36,bottom:8,containLabel:true},tooltip:{...T.tooltip,trigger:'axis',axisPointer:{type:'shadow'},formatter:ps=>{const x=A2[ps[0].dataIndex];return `<b>${esc(x.k)}</b><div style="min-width:220px;margin-top:4px">${linhaTip(corS('Realizado'),'Ganhas',`${nf(x.g.length)} · ${M(medida(x.g,'v'))}`)}${linhaTip(T.mu,'Perdidas',`${nf(x.p.length)} · ${M(medida(x.p,'v'))}`)}${linhaTip('','Taxa de conversão',nf(conv(x))+'%')}</div>`;}},
+      xAxis:T.vAxis,yAxis:{type:'category',data:A2.map(x=>x.k),...T.cAxis,axisLabel:{color:T.fg,fontSize:12}},
+      series:[{name:'Ganhas',type:'bar',stack:'r',barWidth:'55%',data:A2.map(x=>medida(x.g,'v')),itemStyle:{color:corS('Realizado')}},
+        {name:'Perdidas',type:'bar',stack:'r',data:A2.map(x=>medida(x.p,'v')),itemStyle:{color:T.mu,opacity:.45,borderRadius:[0,4,4,0]},label:{show:true,position:'right',color:T.fg,fontSize:11,formatter:p=>`${nf(conv(A2[p.dataIndex]))}% conv.`}}]});}}
 function renderCascata(P){
   const base=S.rel.base,foto=fotoBase(base),box=$('#rCas');
   if(!foto){const f=S.fotos.map(x=>x.data).sort();
@@ -939,8 +987,8 @@ function exportarTabela(){const P=S.rel.per,D=S.rel.dim,L=linhasFc(P,D),T=totalF
   const l=x=>[x.k,nCsv(x.meta),nCsv(x.real),x.meta?nCsv(x.real/x.meta*100):'',nCsv(x.Commit),nCsv(x.prev),nCsv(x['Best case']),nCsv(x.Pipeline),nCsv(x.aberto),nCsv(x.pond),nCsv(x.gap),x.cob===null||!x.meta?'':nCsv(x.cob),cobInfo(x).t,x.n,x.riscos];
   baixar(`forecast-por-${slug(DIMS[D].t)}-${slug(PER_L(P))}.csv`,csv([cab,...L.map(l),l(T)]));}
 function exportarOpps(){const P=S.rel.per,a=selOpps().filter(o=>OPEN.has(o.status)&&inPer(o.fechamento,P)).sort((x,y)=>(x.fechamento||'').localeCompare(y.fechamento||''));
-  const cab=['Nº','Gerente','Diretor','Área','Cliente','Oportunidade','Etapa','Probabilidade (%)','Categoria','Categoria sugerida?','Fechamento','Quarter','Valor no ano','Ponderado','Próximo passo','Data do próximo passo','Adiamentos','Riscos'];
-  baixar(`oportunidades-forecast-${slug(PER_L(P))}.csv`,csv([cab,...a.map(o=>[o.numero,o.gerente,diretorDe(o.gerente),areaDe(o.gerente),o.cliente,o.titulo,o.status,o.probabilidade,catDe(o),CATS.includes(o.categoria)?'Não':'Sim',fmtD(o.fechamento),o.fechamento?QC[quarter(o.fechamento)]:'',
+  const cab=['Nº','Gerente','Diretor','Área','Cliente','Oportunidade','Origem','Origem (qual)','Team members','Etapa','Probabilidade (%)','Categoria','Categoria sugerida?','Fechamento','Quarter','Valor no ano','Ponderado','Próximo passo','Data do próximo passo','Adiamentos','Riscos'];
+  baixar(`oportunidades-forecast-${slug(PER_L(P))}.csv`,csv([cab,...a.map(o=>[o.numero,o.gerente,diretorDe(o.gerente),areaDe(o.gerente),o.cliente,o.titulo,o.origemOpp||'',o.origemDet||'',(o.team||[]).join(', '),o.status,o.probabilidade,catDe(o),CATS.includes(o.categoria)?'Não':'Sim',fmtD(o.fechamento),o.fechamento?QC[quarter(o.fechamento)]:'',
     nCsv(vAno(o)),nCsv(vAno(o)*(Number(o.probabilidade)||0)/100),o.proximoPasso||'',fmtD(o.proximoPassoData||''),Number(o.adiamentos)||0,riscos(o).map(r=>r.l).join(' | ')])]));}
 $('#v-relatorios').addEventListener('click',e=>{const r=e.target.closest('[data-rel],[data-relq]');if(!r)return;
   if(r.dataset.rel!==undefined)S.rel.det={k:r.dataset.rel};else{const [k,q]=r.dataset.relq.split('|');S.rel.det={k,q:+q};}renderRelDet();rolarDet();});
@@ -1234,7 +1282,7 @@ $('#simR').addEventListener('input',e=>{S.sim.pct=+e.target.value;renderSim(base
 $('#simPresets').addEventListener('click',e=>{const x=e.target.closest('button');if(!x)return;S.sim.pct=+x.dataset.p;renderSim(base());});
 $('#simEx').addEventListener('change',e=>{S.sim.ex=e.target.checked;renderSim(base());});
 $('#evFab').addEventListener('change',e=>{S.evFab=e.target.value;renderEvol(base());});
-$('#qOpp').addEventListener('input',renderOpps);$('#fStatus').addEventListener('change',renderOpps);
+$('#qOpp').addEventListener('input',renderOpps);$('#fStatus').addEventListener('change',renderOpps);$('#fTeam').addEventListener('change',renderOpps);
 $('#qCli').addEventListener('input',renderClientes);$('#fGerC').addEventListener('change',renderClientes);
 let rT;window.addEventListener('resize',()=>{clearTimeout(rT);rT=setTimeout(()=>{if(cur()==='painel')renderHero(base());},200);});
 
@@ -1266,6 +1314,9 @@ function oppForm(o,preCli){
       <label>Tipo de revenda<select id="o_rev">${opts(opcoes('revenda',o.revenda),o.revenda||'','')}</select></label>
       <label>Fabricante<select id="o_soft">${opts(opcoes('fabricante',o.software),o.software||'','')}</select></label>
       <label>Parceiro<select id="o_parc">${opts(opcoes('parceiro',o.parceiro),o.parceiro||'','')}</select></label>
+      <label>Origem da oportunidade<select id="o_orig" ${isNew?'required':''}>${opts(opcoes('origem',o.origemOpp),o.origemOpp||'','')}</select></label>
+      <label id="o_odetL" hidden></label>
+      <fieldset class="full team-box"><legend>Team members <span class="note">(especialistas que trabalham na oportunidade além do gerente)</span></legend>${(t=>t.length?t.map(v=>`<label class="chk"><input type="checkbox" value="${esc(v)}" ${(o.team||[]).includes(v)?'checked':''} ${ro?'disabled':''}> ${esc(v)}</label>`).join(''):'<span class="note">Nenhum especialista cadastrado ainda. Quem tem acesso às Configurações cadastra em Listas de opções &gt; Team members.</span>')(uniq([...opcoes('team'),...(o.team||[])]))}</fieldset>
       <label>Valor de serviço (R$)<input id="o_vs" type="number" min="0" step="1000" value="${esc(o.valorServico||0)}"></label>
       <label>Valor de software (R$)<input id="o_vsw" type="number" min="0" step="1000" value="${esc(o.valorSoftware||0)}"></label>
       <label>Faturamento de serviço no ano (R$)<input id="o_fs" type="number" min="0" step="1000" value="${esc(o.faturamentoServico||0)}"></label>
@@ -1277,6 +1328,10 @@ function oppForm(o,preCli){
       <div class="full actions"><button type="button" class="ghost" data-close>Cancelar</button><button class="blue" ${ro?'disabled':''}>${isNew?'Cadastrar':'Salvar alterações'}</button></div>
     </form>${isNew?'<p class="note" style="margin:0">O número da oportunidade é gerado ao cadastrar. Depois de cadastrar, você pode anexar arquivos e enviar para pré-vendas.</p>':'<section class="opp-extra" id="oExtra"></section>'}`,d=>{
       if(!isNew){S.extraErr='';renderExtras(o);carregarExtras(o);}
+      const odet=()=>{const v=$('#o_orig').value,t=origemDet(v),L=$('#o_odetL'),cur=v===o.origemOpp?(o.origemDet||''):(($('#o_odet')||{}).value||'');L.hidden=!t;
+        L.innerHTML=!t?'':esc(DET_ORIGEM[t])+(t==='texto'?`<input id="o_odet" required value="${esc(cur)}" placeholder="Ex.: nome do evento ou de quem indicou">`:`<select id="o_odet" required>${opts(detOpcoes(t,cur),cur,'')}</select>`);
+        if(ro&&$('#o_odet'))$('#o_odet').disabled=true;};
+      $('#o_orig').addEventListener('change',odet);odet();
       const bc=d.querySelector('[data-copiar-num]');if(bc)bc.addEventListener('click',()=>copiar(bc.dataset.copiarNum,`Número ${bc.dataset.copiarNum} copiado`));
       const tot=()=>{$('#o_total').textContent=`Valor total: ${brl((+$('#o_vs').value||0)+(+$('#o_vsw').value||0))} · Valor no ano (usado no forecast): ${brl((+$('#o_fs').value||0)+(+$('#o_sa').value||0))}`;};
       ['#o_vs','#o_vsw','#o_fs','#o_sa'].forEach(s=>$(s).addEventListener('input',tot));tot();
@@ -1288,7 +1343,7 @@ function oppForm(o,preCli){
       $('#oppF').addEventListener('submit',async e=>{e.preventDefault();if(ro)return;if(S.readOnly)return;
         const nome=$('#o_cliente').value.trim();const c=S.clientes.find(x=>x.nome.toLowerCase()===nome.toLowerCase());
         const data={...o,titulo:$('#o_titulo').value.trim(),cliente:c?c.nome:nome,clienteId:c?c.id:slug(nome),gerente:$('#o_gerente').value,status:$('#o_status').value,
-          probabilidade:Math.max(0,Math.min(100,+$('#o_prob').value||0)),area:$('#o_area').value,revenda:$('#o_rev').value||null,software:$('#o_soft').value||null,parceiro:$('#o_parc').value||null,
+          probabilidade:Math.max(0,Math.min(100,+$('#o_prob').value||0)),area:$('#o_area').value,revenda:$('#o_rev').value||null,software:$('#o_soft').value||null,parceiro:$('#o_parc').value||null,origemOpp:$('#o_orig').value||null,team:[...document.querySelectorAll('.team-box input:checked')].map(i=>i.value),origemDet:(!$('#o_odetL').hidden&&$('#o_odet')?$('#o_odet').value.trim():'')||null,
           valorServico:+$('#o_vs').value||0,valorSoftware:+$('#o_vsw').value||0,faturamentoServico:+$('#o_fs').value||0,softwareAno:+$('#o_sa').value||0,
           cadastro:$('#o_cad').value||null,fechamento:$('#o_fech').value||null,observacoes:$('#o_obs').value.trim(),atualizadoEm:new Date().toISOString(),
           categoria:OPEN.has($('#o_status').value)?($('#o_cat').value||null):null,proximoPasso:$('#o_pp').value.trim(),proximoPassoData:$('#o_ppd').value||null};

@@ -17,6 +17,7 @@ export function oppFromDb(r: any) {
     valorTotal: Number(r.valor_total) || 0, valorServico: Number(r.valor_servico) || 0, valorSoftware: Number(r.valor_software) || 0,
     faturamentoServico: Number(r.faturamento_servico) || 0, softwareAno: Number(r.software_ano) || 0,
     descServico: r.desc_servico, descProduto: r.desc_produto, observacoes: r.observacoes, origem: r.origem,
+    origemOpp: r.origem_oportunidade || null, origemDet: r.origem_detalhe || null, team: r.team_members || [],
     categoria: r.categoria || null, proximoPasso: r.proximo_passo || '', proximoPassoData: r.proximo_passo_data || null,
     adiamentos: r.adiamentos || 0, etapaDesde: r.etapa_desde || null, atualizadoEm: r.atualizado_em || null,
   };
@@ -28,6 +29,7 @@ export function oppToDb(o: any, userId?: string) {
     probabilidade: o.probabilidade, valor_total: o.valorTotal, valor_servico: o.valorServico, valor_software: o.valorSoftware,
     faturamento_servico: o.faturamentoServico, software_ano: o.softwareAno, observacoes: o.observacoes ?? null,
     // adiamentos e etapa_desde são calculados pelo banco (gatilho)
+    origem_oportunidade: o.origemOpp || null, origem_detalhe: o.origemDet || null, team_members: o.team || [],
     categoria: o.categoria || null, proximo_passo: o.proximoPasso || null, proximo_passo_data: o.proximoPassoData || null,
     atualizado_em: new Date().toISOString(), atualizado_por: userId ?? null,
   };
@@ -111,18 +113,29 @@ export const api = {
   },
   // listas de opções dos campos de seleção: { fabricante: [{v, ativo}], ... }; null = usar o padrão do app
   async listas() {
-    const { data, error } = await sb.from('opcoes').select('lista,valor,ativo').order('lista').order('ordem'); if (error) throw error;
+    const { data, error } = await sb.from('opcoes').select('lista,valor,ativo,detalhe').order('lista').order('ordem'); if (error) throw error;
     if (!data?.length) return null;
-    const out: Record<string, { v: string; ativo: boolean }[]> = {};
-    for (const r of data) (out[r.lista] ||= []).push({ v: r.valor, ativo: r.ativo });
+    const out: Record<string, { v: string; ativo: boolean; det?: string }[]> = {};
+    for (const r of data) (out[r.lista] ||= []).push({ v: r.valor, ativo: r.ativo, ...(r.detalhe ? { det: r.detalhe } : {}) });
     return out;
   },
-  async salvarLista(lista: string, itens: { v: string; ativo?: boolean }[]) {
-    const rows = itens.map((i, n) => ({ lista, valor: i.v, ordem: n + 1, ativo: i.ativo !== false }));
+  async salvarLista(lista: string, itens: { v: string; ativo?: boolean; det?: string }[]) {
+    const rows = itens.map((i, n) => ({ lista, valor: i.v, ordem: n + 1, ativo: i.ativo !== false, detalhe: i.det || null }));
     if (rows.length) { const { error } = await sb.from('opcoes').upsert(rows); if (error) throw error; }
     let q = sb.from('opcoes').delete().eq('lista', lista);
     if (rows.length) q = q.not('valor', 'in', `(${rows.map(r => `"${r.valor.replace(/"/g, '\\"')}"`).join(',')})`);
     const { error } = await q; if (error) throw error;
+  },
+  // renomear uma opção nas oportunidades que a usam (campo simples ou lista de team members)
+  async renomearOpcaoOpps(campo: string, de: string, para: string) {
+    const col = ({ origemOpp: 'origem_oportunidade', software: 'software', revenda: 'revenda', team: 'team_members' } as Record<string, string>)[campo];
+    if (!col) return;
+    if (col !== 'team_members') { const { error } = await sb.from('oportunidades').update({ [col]: para }).eq(col, de); if (error) throw error; return; }
+    const { data, error } = await sb.from('oportunidades').select('numero,team_members').contains('team_members', [de]); if (error) throw error;
+    for (const r of data || []) {
+      const t = (r.team_members as string[]).map(x => (x === de ? para : x));
+      const { error: e } = await sb.from('oportunidades').update({ team_members: [...new Set(t)] }).eq('numero', r.numero); if (e) throw e;
+    }
   },
   // ---- acessos ----
   async papeis() {

@@ -165,6 +165,7 @@
     <div class="card toolbar">
       <input type="search" id="qOpp" placeholder="Buscar cliente, oportunidade, fabricante ou número">
       <select id="fStatus"><option value="abertas">Em aberto</option><option value="ganhas">Ganhas</option><option value="">Todas</option></select>
+      <select id="fTeam" aria-label="Team member" hidden></select>
       <span class="note" id="oppCount"></span>
     </div>
     <div class="card" style="padding:0"><div class="scroll" style="max-height:70vh"><table id="tbOpp"></table></div></div>
@@ -212,7 +213,7 @@
     <div class="card-head" style="margin:0;flex-wrap:wrap;gap:10px"><div><span class="eyebrow">Forecast</span><h2>Relatórios</h2></div>
       <div class="toolbar"><label class="note">Ano <select id="rAno"></select></label>
         <div class="seg" id="rPer" role="group" aria-label="Período"><button data-v="ano">Ano</button><button data-v="0">Q1</button><button data-v="1">Q2</button><button data-v="2">Q3</button><button data-v="3">Q4</button></div>
-        <div class="seg" id="rDim" role="group" aria-label="Visão"><button data-v="ger">Gerente</button><button data-v="dir">Diretor</button><button data-v="area">Área</button><button data-v="fab">Fabricante</button></div></div></div>
+        <div class="seg" id="rDim" role="group" aria-label="Visão"><button data-v="ger">Gerente</button><button data-v="dir">Diretor</button><button data-v="area">Área</button><button data-v="fab">Fabricante</button><button data-v="orig">Origem</button></div></div></div>
     <div class="banner" id="rVisao" style="margin-top:12px"></div>
     <div class="grid g4" id="rKpis"></div>
     <div class="card"><div class="card-head" style="margin:0"><div><h3 id="rMetaTit"></h3><div class="sub">Realizado (notas emitidas) + Commit + Best case + Pipeline contra a meta (marca vermelha). Clique numa barra para ver as oportunidades.</div></div><div class="seg" id="rEsc" role="group" aria-label="Escala"><button data-v="valor">R$</button><button data-v="pct">% da meta</button></div></div><div id="rChMeta" class="ec"></div></div>
@@ -220,6 +221,7 @@
       <div class="card"><h3>Previsão por quarter</h3><div class="sub" id="rQSub"></div><div id="rChQ" class="ec" style="height:330px"></div></div>
       <div class="card"><h3>Pipeline por etapa</h3><div class="sub">Valor no ano e valor ponderado pela probabilidade da etapa. Embaixo do nome: probabilidade e quantidade.</div><div id="rChEt" class="ec" style="height:330px"></div></div>
     </div>
+    <div class="card"><h3>Origem das oportunidades</h3><div class="sub" id="rOrigSub"></div><div class="grid g2" style="margin-top:8px"><div><div class="mini-tit">Pipeline aberto por origem</div><div id="rChOrA" class="ec" style="height:260px"></div></div><div><div class="mini-tit">Ganhas e perdidas por origem</div><div class="note">Valor no ano; no fim da barra, a taxa de conversão em quantidade.</div><div id="rChOrB" class="ec" style="height:260px"></div></div></div></div>
     <div class="card" style="padding:0"><div class="card-head" style="padding:18px 18px 0"><div><h3 id="rTabTit"></h3><div class="sub" id="rTabSub"></div></div><button class="ghost" id="rExpTab">Exportar planilha</button></div><div class="scroll"><table id="rTab" class="rel"></table></div></div>
     <div class="card"><h3 id="rCobQTit"></h3><div class="sub">Pipeline aberto do quarter ÷ o que falta da meta do quarter (¼ da meta anual). Quarter encerrado mostra quanto da meta foi atingido. Clique numa célula para ver as oportunidades.</div><div id="rCobQ" style="margin-top:10px"></div></div>
     <div class="card"><div class="card-head"><div><h3>O que mudou no pipeline</h3><div class="sub" id="rCasSub"></div></div><label class="note">Comparar com <select id="rBase"><option value="semana">a foto da semana passada</option><option value="4sem">a foto de 4 semanas atrás</option><option value="inicio">a primeira foto</option></select></label></div><div id="rCas"></div></div>

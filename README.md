@@ -35,6 +35,13 @@ Padrão: o gerente vê só a própria carteira; o diretor escolhe uma ou várias
 - **Envio para pré-vendas:** na oportunidade, *Enviar para pré-vendas* manda um e-mail com os dados e os anexos escolhidos para uma pessoa da lista de *Configurações > Pré-vendas*, com cópia para o e-mail da conta de quem envia. Cada envio fica registrado na oportunidade (tabela `envios`), inclusive os que falharem.
 - O e-mail sai pela função `supabase/functions/enviar-oportunidade`, usando o [Resend](https://resend.com). Para ligar: crie a conta, verifique o domínio de e-mail da Almaviva (a TI adiciona os registros DNS que o Resend mostrar), crie uma chave e cadastre os segredos `RESEND_API_KEY` e `EMAIL_REMETENTE` (ex.: `CRM Almaviva <crm@seudominio.com.br>`) em *Supabase > Edge Functions > Secrets*. Publique a função com `supabase functions deploy enviar-oportunidade`.
 
+## Origem e team members
+
+- **Origem da oportunidade:** obrigatória nas oportunidades novas. Origens iniciais: Fabricante, Edital Publicado, Gerente de Conta, Diretor, Evento X e Evento Y. Cada origem pode pedir um detalhe (qual gerente, qual diretor, qual fabricante ou um texto livre); Gerente de Conta e Diretor já vêm pedindo. Ficam em `oportunidades.origem_oportunidade` e `origem_detalhe` (a coluna `origem` continua indicando se o registro veio do CRM ou da carga).
+- **Team members:** especialistas que trabalham na oportunidade além do gerente, um ou mais por oportunidade (`oportunidades.team_members`, lista de texto). A lista de especialistas começa vazia e é cadastrada em *Configurações > Listas de opções*. A tela de Oportunidades filtra por team member.
+- **Relatórios:** card *Origem das oportunidades* (pipeline aberto por origem e ganhas × perdidas com taxa de conversão) e visão *Origem* na tabela de forecast, em que o realizado é o valor das oportunidades ganhas, porque o faturamento não tem origem.
+- Renomear uma origem, um fabricante, um tipo de revenda ou um team member em *Listas de opções* atualiza as oportunidades que usavam o nome antigo.
+
 ## Configurações (aba do app)
 
 Só quem tem a permissão Configurações vê e altera esta aba (por padrão, só o Administrador).
@@ -44,7 +51,7 @@ Só quem tem a permissão Configurações vê e altera esta aba (por padrão, s�
 - **Metas:** período e meta de cada gerente para o ano escolhido no painel.
 - **Pré-vendas:** nome e e-mail de quem pode receber oportunidades enviadas pelo CRM.
 - **Forecast e riscos:** cobertura alvo, probabilidades da categoria sugerida e limites dos selos de risco.
-- **Listas de opções:** valores de cada campo de seleção (área de negócio, fabricante, parceiro, tipo de revenda, segmento do cliente, área e território do gerente). Opções desativadas somem dos formulários, mas continuam nos registros antigos.
+- **Listas de opções:** valores de cada campo de seleção (área de negócio, fabricante, parceiro, tipo de revenda, origem, team members, segmento do cliente, área e território do gerente). Cada opção pode ser incluída, editada, reordenada, desativada ou, se não estiver em uso, excluída. Opções desativadas somem dos formulários, mas continuam nos registros antigos.
 
 ## Regras de cálculo (iguais às do dashboard anterior)
 
@@ -56,7 +63,7 @@ Só quem tem a permissão Configurações vê e altera esta aba (por padrão, s�
 
 ## Como colocar no ar
 
-1. **Supabase.** Crie um projeto em [supabase.com](https://supabase.com), na região São Paulo. Em *SQL Editor*, rode os arquivos de `supabase/migrations/` na ordem do nome: `20261126000000_schema.sql`, `20261126010000_configuracoes.sql`, `20261126020000_acessos.sql`, `20261127000000_reuniao_forecast.sql`, `20261127010000_forecast.sql` e `20261127020000_anexos_envios.sql`.
+1. **Supabase.** Crie um projeto em [supabase.com](https://supabase.com), na região São Paulo. Em *SQL Editor*, rode os arquivos de `supabase/migrations/` na ordem do nome: `20261126000000_schema.sql`, `20261126010000_configuracoes.sql`, `20261126020000_acessos.sql`, `20261127000000_reuniao_forecast.sql`, `20261127010000_forecast.sql`, `20261127020000_anexos_envios.sql` e `20261128000000_origem_team.sql`.
 2. **Variáveis.** Copie `.env.example` para `.env` e preencha com os dados de *Project Settings > API*. A chave `service_role` só é usada pelo script de importação. Não a coloque no Vercel.
 3. **Carga inicial.** Rode na sua máquina, com as planilhas na pasta:
    ```bash
