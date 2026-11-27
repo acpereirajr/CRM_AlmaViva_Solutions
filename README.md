@@ -17,6 +17,13 @@ No cadastro de cada usuário dá para abrir **exceções**: outra carteira, ou u
 
 Padrão: o gerente vê só a própria carteira; o diretor escolhe uma ou várias áreas e um ou vários gerentes; o administrador vê tudo. A lista de oportunidades segue a seleção do painel. As regras valem no banco (RLS): mesmo quem chamar a API direto só lê e grava o que o seu acesso permite.
 
+## Relatórios e Reunião de forecast
+
+- **Relatórios:** forecast por gerente, por diretor e por área, no total do ano ou por quarter, medido por valor no ano, valor ponderado (× probabilidade) ou quantidade. Clique numa linha ou célula para ver as oportunidades. Segue a seleção do painel e a carteira do usuário.
+- **Reunião de forecast:** para a diretoria conduzir a reunião com cada gerente. Mostra meta, realizado, forecast e gap do gerente, dois gráficos 3D interativos (forecast por gerente e quarter; oportunidades por dias até o fechamento × probabilidade × valor) e o registro de **ações** por oportunidade e por gerente, com responsável, prazo e conclusão.
+- O diretor de cada gerente é definido em *Configurações > Gerentes de negócios*; os nomes dos diretores ficam em *Listas de opções > Diretor comercial*.
+- Permissões: `ver_relatorios`, `ver_reuniao` e `registrar_acoes`. Por padrão, gerentes veem Relatórios (só a própria carteira) mas não a Reunião.
+
 ## Configurações (aba do app)
 
 Só quem tem a permissão Configurações vê e altera esta aba (por padrão, só o Administrador).
@@ -36,7 +43,7 @@ Só quem tem a permissão Configurações vê e altera esta aba (por padrão, s�
 
 ## Como colocar no ar
 
-1. **Supabase.** Crie um projeto em [supabase.com](https://supabase.com), na região São Paulo. Em *SQL Editor*, rode os arquivos de `supabase/migrations/` na ordem do nome: `20261126000000_schema.sql`, `20261126010000_configuracoes.sql` e `20261126020000_acessos.sql`.
+1. **Supabase.** Crie um projeto em [supabase.com](https://supabase.com), na região São Paulo. Em *SQL Editor*, rode os arquivos de `supabase/migrations/` na ordem do nome: `20261126000000_schema.sql`, `20261126010000_configuracoes.sql`, `20261126020000_acessos.sql` e `20261127000000_reuniao_forecast.sql`.
 2. **Variáveis.** Copie `.env.example` para `.env` e preencha com os dados de *Project Settings > API*. A chave `service_role` só é usada pelo script de importação. Não a coloque no Vercel.
 3. **Carga inicial.** Rode na sua máquina, com as planilhas na pasta:
    ```bash

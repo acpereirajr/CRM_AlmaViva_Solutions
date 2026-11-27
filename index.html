@@ -27,6 +27,8 @@
       <a href="#oportunidades">Oportunidades</a>
       <a href="#clientes">Clientes</a>
       <a href="#faturamento">Faturamento 2026</a>
+      <a href="#relatorios">Relatórios</a>
+      <a href="#reuniao">Reunião de forecast</a>
       <a href="#config">Configurações</a>
     </nav>
     <div class="spacer"></div>
@@ -205,6 +207,37 @@
     </div>
     <p class="note" style="text-align:right">Fonte: FATURAMENTOS_2026.xlsx, aba Consolidado. Lançamentos cancelados e sem valor ficam de fora.</p>
   </section>
+  <!-- RELATÓRIOS -->
+  <section class="view" id="v-relatorios" hidden style="margin-top:22px">
+    <div class="card-head" style="margin:0;flex-wrap:wrap;gap:10px"><div><span class="eyebrow">Forecast</span><h2>Relatórios</h2></div>
+      <div class="toolbar"><label class="note">Ano <select id="rAno"></select></label>
+        <div class="seg" id="rModo" role="group" aria-label="Visão"><button data-m="ano" aria-pressed="true">Ano</button><button data-m="tri" aria-pressed="false">Por quarter</button></div>
+        <label class="note">Medida <select id="rMed"><option value="v">Valor no ano</option><option value="p">Valor ponderado</option><option value="n">Quantidade</option></select></label></div></div>
+    <div class="banner" id="rVisao" style="margin-top:12px"></div>
+    <div class="grid g4" id="rKpis"></div>
+    <p class="note" style="margin:4px 0 0">Forecast = oportunidades em etapas "em aberto" com fechamento no ano, pelo valor no ano (serviço + software no ano). Clique numa linha ou célula para ver as oportunidades.</p>
+    <div class="card"><h3>Forecast por gerente</h3><div id="rGer" style="margin-top:10px"></div></div>
+    <div class="card"><h3>Forecast por diretor</h3><div class="sub">Diretor de cada gerente, definido em Configurações > Gerentes de negócios.</div><div id="rDir" style="margin-top:10px"></div></div>
+    <div class="card"><h3>Forecast por área</h3><div class="sub">Área de cada gerente, definida em Configurações > Gerentes de negócios.</div><div id="rArea" style="margin-top:10px"></div></div>
+    <div class="card" id="rDetCard" hidden style="padding:0"><div class="card-head" style="padding:18px 18px 0"><h3 id="rDetTit"></h3><button class="ghost" id="rDetFechar">Fechar</button></div><div class="scroll"><table id="rDet"></table></div></div>
+  </section>
+
+  <!-- REUNIÃO DE FORECAST -->
+  <section class="view" id="v-reuniao" hidden style="margin-top:22px">
+    <div class="card-head" style="margin:0;flex-wrap:wrap;gap:10px"><div><span class="eyebrow">Reunião de forecast</span><h2 id="mTit">Reunião de forecast</h2></div>
+      <div class="toolbar"><label class="note">Gerente <select id="mGer"></select></label><label class="note">Ano <select id="mAno"></select></label></div></div>
+    <div class="grid g5" id="mKpis" style="margin-top:12px"></div>
+    <div class="grid g2">
+      <div class="card"><h3>Forecast por gerente e quarter</h3><div class="sub">Arraste para girar, role para aproximar. Clique numa barra para trocar de gerente. Em laranja, o gerente da reunião.</div><div id="m3dBar" class="chart3d"></div></div>
+      <div class="card"><h3>Oportunidades do gerente em 3D</h3><div class="sub">Dias até o fechamento × probabilidade × valor no ano. Cor = etapa, tamanho = valor. Clique num ponto para registrar ações.</div><div id="m3dOpp" class="chart3d"></div></div>
+    </div>
+    <div class="grid g2">
+      <div class="card"><h3>Ações do gerente</h3><div class="sub">Combinados com o gerente que não são de uma oportunidade específica.</div><ul class="acoes" id="mAcGer"></ul><div id="mAcGerForm"></div></div>
+      <div class="card"><h3>Ações nas oportunidades</h3><div class="sub">Tudo o que foi registrado nas oportunidades deste gerente.</div><ul class="acoes" id="mAcOpp"></ul></div>
+    </div>
+    <div class="card" style="padding:0"><div style="padding:18px 18px 8px"><h3 id="mOppTit"></h3><div class="sub">Fechamentos em vermelho já venceram. Use "Ações" para registrar o combinado na reunião.</div></div><div class="scroll" style="max-height:60vh"><table id="mOpps"></table></div></div>
+  </section>
+
   <!-- CONFIGURAÇÕES -->
   <section class="view" id="v-config" hidden style="margin-top:22px">
     <div class="sec-head" style="margin:0"><h2>Configurações</h2><span class="sub">Etapas do funil, gerentes de negócios, metas e as opções de cada campo de seleção. As mudanças valem na hora para todo o CRM.</span></div>

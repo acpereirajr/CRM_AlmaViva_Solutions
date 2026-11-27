@@ -149,12 +149,23 @@ export const api = {
     if (antigo && antigo !== email) { const { error } = await sb.from('convites').delete().eq('email', antigo); if (error) throw error; }
     const { error } = await sb.from('convites').upsert({ email, ...d }); if (error) throw error;
   },
+  // ---- ações da reunião de forecast ----
+  async acoes() {
+    return (await todos('acoes', '*', 'id')).map((r: any) => ({ id: r.id, tipo: r.tipo, numero: r.numero, gerente: r.gerente, texto: r.texto,
+      responsavel: r.responsavel || '', prazo: r.prazo, status: r.status, criadoEm: r.criado_em, criadoPorNome: r.criado_por_nome || '' }));
+  },
+  async salvarAcao(a: any, userId?: string) {
+    const r: any = { tipo: a.tipo, numero: a.numero ?? null, gerente: a.gerente, texto: a.texto, responsavel: a.responsavel || null,
+      prazo: a.prazo || null, status: a.status, atualizado_em: new Date().toISOString() };
+    if (a.id) { const { error } = await sb.from('acoes').update(r).eq('id', a.id); if (error) throw error; return; }
+    const { error } = await sb.from('acoes').insert({ ...r, criado_por: userId ?? null, criado_por_nome: a.criadoPorNome || null }); if (error) throw error;
+  },
   async gerentes() {
     const { data, error } = await sb.from('gerentes').select('*').order('nome'); if (error) throw error;
     return data || [];
   },
   async salvarGerente(g: any, userId?: string) {
-    const { error } = await sb.from('gerentes').upsert({ nome: g.nome, email: g.email || null, area: g.area || null, territorio: g.territorio || null,
+    const { error } = await sb.from('gerentes').upsert({ nome: g.nome, email: g.email || null, area: g.area || null, territorio: g.territorio || null, diretor: g.diretor || null,
       ativo: g.ativo !== false, atualizado_em: new Date().toISOString(), atualizado_por: userId ?? null });
     if (error) throw error;
   },
@@ -181,6 +192,7 @@ export const api = {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'metas' }, () => fn('metas'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'opcoes' }, () => fn('opcoes'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'papeis' }, () => fn('papeis'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'acoes' }, () => fn('acoes'))
       .subscribe();
   },
 };

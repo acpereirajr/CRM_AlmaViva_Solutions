@@ -1,2 +1,3 @@
 import { defineConfig } from 'vite';
-export default defineConfig({ server: { port: 5173 } });
+// echarts e echarts-gl só carregam na Reunião de forecast (import dinâmico), por isso os pedaços grandes são esperados.
+export default defineConfig({ server: { port: 5173 }, build: { chunkSizeWarningLimit: 1600 } });

@@ -214,3 +214,22 @@ dl.facts dd{margin:0;font-weight:700}
 .lista td.w{white-space:normal}
 .lista-add{display:flex;gap:6px;margin-top:10px}
 .lista-add input{flex:1}
+
+/* Relatórios e Reunião de forecast */
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden}
+.seg button{border:0;border-radius:0;padding:6px 14px}
+.seg button[aria-pressed="true"]{background:var(--c1);color:#fff}
+.grid.g4{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+table.rel tfoot td{font-weight:800;border-top:2px solid var(--line)}
+.relbar{display:inline-block;width:120px;height:9px;border-radius:99px;background:var(--surface-3);vertical-align:middle;overflow:hidden}
+.relbar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--c1),var(--c2))}
+td.heat{background:color-mix(in srgb,var(--c1) var(--h),transparent);background:color-mix(in srgb,var(--c1) calc(var(--h) * .55),var(--surface))}
+.chart3d{height:440px;margin-top:8px;border-radius:12px;background:radial-gradient(ellipse at 50% 30%,var(--surface-2),var(--surface))}
+ul.acoes{list-style:none;padding:0;margin:10px 0;display:grid;gap:8px}
+li.acao{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}
+li.acao input{width:auto;margin-top:3px}
+li.acao.feita .txt{text-decoration:line-through;color:var(--muted)}
+li.acao .txt{font-weight:700;font-size:13.5px}
+.venc{color:var(--meta)!important;font-weight:700}
+.acao-f{display:grid;grid-template-columns:1fr 160px 150px auto;gap:6px}
+@media (max-width:720px){.acao-f{grid-template-columns:1fr}}
