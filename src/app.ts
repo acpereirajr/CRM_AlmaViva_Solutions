@@ -28,7 +28,7 @@ const LISTAS_DEF=[
   {id:'parceiro',nome:'Parceiro',onde:'Oportunidade',campo:o=>String(o.parceiro||'').split(',').map(s=>s.trim())},
   {id:'revenda',nome:'Tipo de revenda',onde:'Oportunidade',campo:o=>[o.revenda],ren:'revenda'},
   {id:'origem',nome:'Origem da oportunidade',onde:'Oportunidade',campo:o=>[o.origemOpp],ren:'origemOpp',det:true},
-  {id:'team',nome:'Team members (especialistas)',onde:'Oportunidade',campo:o=>o.team||[],ren:'team'},
+  {id:'team',nome:'Team members',onde:'Oportunidade',campo:o=>o.team||[],ren:'team',oculta:true},
   {id:'segmento',nome:'Segmento',onde:'Cliente',cli:c=>[c.segmento]},
   {id:'area_gerente',nome:'Área do gerente',onde:'Gerente de negócios',ger:g=>[g.area]},
   {id:'territorio',nome:'Território',onde:'Gerente de negócios',ger:g=>[g.territorio]},
@@ -514,9 +514,9 @@ $('#fPrev').addEventListener('click',()=>{S.f.page--;renderFat();});$('#fNext').
 /* ================= configurações ================= */
 function renderConfig(){
   document.querySelectorAll('#cfgTabs button').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.cfg===S.cfg)));
-  ['etapas','gerentes','metas','listas','forecast','prevendas','acessos'].forEach(k=>{$('#cfg-'+k).hidden=k!==S.cfg;});
+  ['etapas','gerentes','metas','listas','forecast','prevendas','team','acessos'].forEach(k=>{$('#cfg-'+k).hidden=k!==S.cfg;});
   const ro=!ADMIN; ['#btnNovaEtapa','#btnNovoGer','#m_save'].forEach(s=>$(s).disabled=ro);
-  ({etapas:renderEtapas,gerentes:renderGerCad,metas:renderMetasCfg,listas:renderListas,forecast:renderParamCfg,prevendas:renderPrevendas,acessos:renderAcessos})[S.cfg]();
+  ({etapas:renderEtapas,gerentes:renderGerCad,metas:renderMetasCfg,listas:renderListas,forecast:renderParamCfg,prevendas:renderPrevendas,team:renderTeam,acessos:renderAcessos})[S.cfg]();
 }
 $('#cfgTabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.cfg=b.dataset.cfg;renderConfig();});
 const usoEtapa=k=>S.opps.filter(o=>o.status===k).length;
@@ -631,7 +631,7 @@ function usoOpcao(def,v){
   return 0;}
 function renderListas(){
   const ro=!ADMIN;
-  $('#listasGrid').innerHTML=LISTAS_DEF.map(def=>{const it=listaItens(def.id);
+  $('#listasGrid').innerHTML=LISTAS_DEF.filter(d=>!d.oculta).map(def=>{const it=listaItens(def.id);
     return `<div class="card lista" data-lista="${def.id}"><div class="card-head" style="margin:0"><div><h3>${esc(def.nome)}</h3><div class="sub">${esc(def.onde)} · ${it.filter(i=>i.ativo!==false).length} ativas</div></div></div>
       <table><tbody>${it.map((i,n)=>{const u=usoOpcao(def,i.v);return `<tr><td class="w">${S.listaEd&&S.listaEd.id===def.id&&S.listaEd.n===n?`<form class="lista-ren" data-ren="${def.id}" data-n="${n}"><input value="${esc(i.v)}" required aria-label="Novo nome"><button class="blue">Salvar</button><button type="button" class="ghost" data-op="cancel">Cancelar</button></form>`:(i.ativo===false?`<span class="tag off">${esc(i.v)}</span>`:esc(i.v))}${def.det&&DET_ORIGEM[i.det]?`<div class="note">Abre o campo "${esc(DET_ORIGEM[i.det])}"</div>`:''}</td><td class="r note">${u?nf(u)+' em uso':''}</td>
         <td class="r" style="white-space:nowrap"><button class="ico" data-op="up" data-n="${n}" ${ro||n===0?'disabled':''} aria-label="Subir">↑</button><button class="ico" data-op="down" data-n="${n}" ${ro||n===it.length-1?'disabled':''} aria-label="Descer">↓</button>
@@ -1254,6 +1254,37 @@ function prevForm(i){const L=S.prevendas||[],p=i==null?{nome:'',email:'',ativo:t
       const nova=i==null?[...L,n]:L.map((x,j)=>j===i?n:x);
       try{await salvarPrevendas(nova);closeDrawer();toast('Pré-vendas salvo');}catch(err){$('#p_err').textContent='Não foi possível salvar: '+(err&&err.message||'');}});});}
 $('#btnNovoPrev').addEventListener('click',()=>prevForm(null));
+/* ---- Configurações > Team members: especialistas e outras pessoas que podem ser indicadas na oportunidade ---- */
+const TIPOS_TEAM=['Especialista','Outro'];
+function renderTeam(){const L=listaItens('team'),ro=!ADMIN,us=S.usuarios||[];
+  $('#tbTeam').innerHTML=`<thead><tr><th>Nome</th><th>Tipo</th><th>Especialidade ou função</th><th>E-mail</th><th class="r">Oportunidades</th><th>Login no CRM</th><th>Situação</th><th></th></tr></thead><tbody>${
+    L.map((t,i)=>{const q=S.opps.filter(o=>(o.team||[]).includes(t.v)).length,u=us.find(x=>x.teamMember===t.v);
+      return `<tr><td><b>${esc(t.v)}</b></td><td>${esc(t.tipo||'Especialista')}</td><td class="w">${esc(t.funcao||'—')}</td><td>${esc(t.email||'—')}</td><td class="r">${q?nf(q):'—'}</td>
+      <td>${u?esc(u.nome)+(u.ativo===false?' (inativo)':''):'<span class="note">Sem login</span>'}</td><td>${t.ativo===false?'<span class="tag off">Inativo</span>':'<span class="tag win">Ativo</span>'}</td>
+      <td class="r" style="white-space:nowrap">${ro?'':`<button class="ico" data-team-ed="${i}">Editar</button>${q?'':`<button class="ico" data-team-del="${i}" aria-label="Excluir">✕</button>`}`}</td></tr>`;}).join('')
+    ||'<tr><td colspan="8" class="note">Ninguém cadastrado. Use "Novo team member" para cadastrar os especialistas e outras pessoas que podem ser indicadas nas oportunidades.</td></tr>'}</tbody>`;
+  $('#btnNovoTeam').disabled=ro;}
+function teamForm(i){const L=listaItens('team'),t=i==null?{v:'',tipo:'Especialista',funcao:'',email:'',ativo:true}:L[i];
+  openDrawer(`<div class="card-head" style="margin:0"><h2 style="font-size:22px">${i==null?'Novo team member':'Editar team member'}</h2><button class="ghost" data-close>Fechar</button></div>
+    <form class="form" id="teamF"><label class="full">Nome<input id="t_nome" required value="${esc(t.v)}"></label>
+      <label>Tipo<select id="t_tipo">${opts(TIPOS_TEAM,t.tipo||'Especialista')}</select></label>
+      <label>Especialidade ou função<input id="t_funcao" value="${esc(t.funcao||'')}" placeholder="Ex.: arquiteto de soluções, especialista Google Cloud"></label>
+      <label class="full">E-mail corporativo<input id="t_email" type="email" value="${esc(t.email||'')}"></label>
+      <label class="full chk"><input type="checkbox" id="t_ativo" ${t.ativo!==false?'checked':''}> Ativo (aparece para ser indicado nas oportunidades)</label>
+      <div class="full note">Para o team member entrar no CRM e ver as oportunidades em que foi indicado, cadastre um usuário do tipo "Team member" em Usuários e acessos e ligue-o a este nome.${i!=null?' Mudar o nome atualiza as oportunidades e o login ligados a ele.':''}</div>
+      <div class="full err" id="t_err"></div><div class="full actions"><button type="button" class="ghost" data-close>Cancelar</button><button class="blue">Salvar</button></div></form>`,d=>{
+    d.querySelector('#teamF').addEventListener('submit',async e=>{e.preventDefault();if(!ADMIN)return;
+      const n={...t,v:$('#t_nome').value.trim(),tipo:$('#t_tipo').value,funcao:$('#t_funcao').value.trim(),email:$('#t_email').value.trim().toLowerCase(),ativo:$('#t_ativo').checked};
+      if(!n.v)return;
+      if(L.some((x,j)=>j!==i&&x.v.toLowerCase()===n.v.toLowerCase())){$('#t_err').textContent='Já existe um team member com esse nome.';return;}
+      const de=i==null?null:t.v,it=L.map(x=>({...x}));if(i==null)it.push(n);else it[i]=n;
+      try{await salvarLista('team',it);S.listas={...(S.listas||{}),team:it};
+        if(de&&de!==n.v){const q=S.opps.filter(o=>(o.team||[]).includes(de)).length;await renomearEmOpps('team',de,n.v);toast(q?`Salvo. ${nf(q)} oportunidade${q===1?'':'s'} atualizada${q===1?'':'s'}.`:'Team member salvo');}
+        else toast('Team member salvo');
+        closeDrawer();renderAll();}catch(err){$('#t_err').textContent='Não foi possível salvar: '+(err&&err.message||'');}});});}
+$('#btnNovoTeam').addEventListener('click',()=>teamForm(null));
+$('#tbTeam').addEventListener('click',e=>{const b=e.target.closest('[data-team-ed]');if(b){teamForm(+b.dataset.teamEd);return;}
+  const x=e.target.closest('[data-team-del]');if(x&&ADMIN){const it=listaItens('team').filter((_,j)=>j!==+x.dataset.teamDel);gravarLista('team',it);renderTeam();}});
 $('#tbPrev').addEventListener('click',e=>{const b=e.target.closest('[data-prev-ed]');if(b)prevForm(+b.dataset.prevEd);});
 
 // ---- produção: arquivos no Supabase Storage, e-mail pela função enviar-oportunidade ----
@@ -1323,7 +1354,7 @@ function oppForm(o,preCli){
       <label>Parceiro<select id="o_parc">${opts(opcoes('parceiro',o.parceiro),o.parceiro||'','')}</select></label>
       <label>Origem da oportunidade<select id="o_orig" ${isNew?'required':''}>${opts(opcoes('origem',o.origemOpp),o.origemOpp||'','')}</select></label>
       <label id="o_odetL" hidden></label>
-      <fieldset class="full team-box"><legend>Team members <span class="note">(especialistas que trabalham na oportunidade além do gerente)</span></legend>${(t=>t.length?t.map(v=>`<label class="chk"><input type="checkbox" value="${esc(v)}" ${(o.team||[]).includes(v)?'checked':''} ${ro?'disabled':''}> ${esc(v)}</label>`).join(''):'<span class="note">Nenhum especialista cadastrado ainda. Quem tem acesso às Configurações cadastra em Listas de opções &gt; Team members.</span>')(uniq([...opcoes('team'),...(o.team||[])]))}</fieldset>
+      <fieldset class="full team-box"><legend>Team members <span class="note">(especialistas e outras pessoas que trabalham na oportunidade além do gerente)</span></legend>${(t=>t.length?t.map(v=>`<label class="chk"><input type="checkbox" value="${esc(v)}" ${(o.team||[]).includes(v)?'checked':''} ${ro?'disabled':''}> ${esc(v)}</label>`).join(''):'<span class="note">Nenhum especialista cadastrado ainda. Quem tem acesso às Configurações cadastra em Configurações &gt; Team members.</span>')(uniq([...opcoes('team'),...(o.team||[])]))}</fieldset>
       <label>Valor de serviço (R$)<input id="o_vs" type="number" min="0" step="1000" value="${esc(o.valorServico||0)}"></label>
       <label>Valor de software (R$)<input id="o_vsw" type="number" min="0" step="1000" value="${esc(o.valorSoftware||0)}"></label>
       <label>Faturamento de serviço no ano (R$)<input id="o_fs" type="number" min="0" step="1000" value="${esc(o.faturamentoServico||0)}"></label>

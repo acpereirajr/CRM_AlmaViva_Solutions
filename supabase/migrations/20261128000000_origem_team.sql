@@ -3,6 +3,8 @@
 
 -- Origem: Gerente de Conta pede qual gerente indicou e Diretor pede qual diretor indicou; as demais não pedem nada
 alter table public.opcoes add column if not exists detalhe text;
+-- Campos extras de um item (Configurações > Team members: tipo, especialidade ou função, e-mail)
+alter table public.opcoes add column if not exists dados jsonb not null default '{}'::jsonb;
 do $$ begin
   alter table public.opcoes add constraint opcoes_detalhe_chk check (detalhe in ('gerente','diretor'));
 exception when duplicate_object then null; end $$;
@@ -25,4 +27,4 @@ insert into public.opcoes (lista, valor, ordem, detalhe) values
   ('origem', 'Evento X', 5, null),
   ('origem', 'Evento Y', 6, null)
 on conflict do nothing;
--- Team members: começa vazia; os especialistas são cadastrados em Configurações > Listas de opções.
+-- Team members (lista 'team'): começa vazia; especialistas e outros são cadastrados em Configurações > Team members.

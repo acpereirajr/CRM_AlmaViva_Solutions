@@ -113,14 +113,15 @@ export const api = {
   },
   // listas de opções dos campos de seleção: { fabricante: [{v, ativo}], ... }; null = usar o padrão do app
   async listas() {
-    const { data, error } = await sb.from('opcoes').select('lista,valor,ativo,detalhe').order('lista').order('ordem'); if (error) throw error;
+    const { data, error } = await sb.from('opcoes').select('lista,valor,ativo,detalhe,dados').order('lista').order('ordem'); if (error) throw error;
     if (!data?.length) return null;
     const out: Record<string, { v: string; ativo: boolean; det?: string }[]> = {};
-    for (const r of data) (out[r.lista] ||= []).push({ v: r.valor, ativo: r.ativo, ...(r.detalhe ? { det: r.detalhe } : {}) });
+    for (const r of data) (out[r.lista] ||= []).push({ ...(r.dados || {}), v: r.valor, ativo: r.ativo, ...(r.detalhe ? { det: r.detalhe } : {}) });
     return out;
   },
-  async salvarLista(lista: string, itens: { v: string; ativo?: boolean; det?: string }[]) {
-    const rows = itens.map((i, n) => ({ lista, valor: i.v, ordem: n + 1, ativo: i.ativo !== false, detalhe: i.det || null }));
+  async salvarLista(lista: string, itens: { v: string; ativo?: boolean; det?: string; [k: string]: any }[]) {
+    // dados: campos extras do item (no cadastro de team members: tipo, funcao, email)
+    const rows = itens.map((i, n) => { const { v, ativo, det, ...dados } = i; return { lista, valor: v, ordem: n + 1, ativo: ativo !== false, detalhe: det || null, dados }; });
     if (rows.length) { const { error } = await sb.from('opcoes').upsert(rows); if (error) throw error; }
     let q = sb.from('opcoes').delete().eq('lista', lista);
     if (rows.length) q = q.not('valor', 'in', `(${rows.map(r => `"${r.valor.replace(/"/g, '\\"')}"`).join(',')})`);

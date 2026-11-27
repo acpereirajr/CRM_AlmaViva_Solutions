@@ -38,7 +38,7 @@ Padrão: o gerente vê só a própria carteira; o diretor escolhe uma ou várias
 ## Origem e team members
 
 - **Origem da oportunidade:** obrigatória nas oportunidades novas. Origens iniciais: Fabricante, Edital Publicado, Gerente de Conta, Diretor, Evento X e Evento Y. Só Gerente de Conta e Diretor abrem um segundo campo, para escolher qual gerente ou qual diretor indicou; as demais origens não pedem nada. Ficam em `oportunidades.origem_oportunidade` e `origem_detalhe` (a coluna `origem` continua indicando se o registro veio do CRM ou da carga).
-- **Team members:** especialistas que trabalham na oportunidade além do gerente, um ou mais por oportunidade (`oportunidades.team_members`, lista de texto). A lista de especialistas começa vazia e é cadastrada em *Configurações > Listas de opções*. A tela de Oportunidades filtra por team member.
+- **Team members:** especialistas que trabalham na oportunidade além do gerente, um ou mais por oportunidade (`oportunidades.team_members`, lista de texto). O cadastro fica em *Configurações > Team members* (nome, tipo Especialista ou Outro, especialidade ou função, e-mail e situação) e começa vazio. A tela de Oportunidades filtra por team member.
 - **Relatórios:** card *Origem das oportunidades* (pipeline aberto por origem e ganhas × perdidas com taxa de conversão) e visão *Origem* na tabela de forecast, em que o realizado é o valor das oportunidades ganhas, porque o faturamento não tem origem.
 - **Login de team members:** novo tipo de usuário *Team member*, com a carteira *Só as oportunidades em que é team member*. Em *Usuários e acessos*, o usuário é ligado a um nome da lista de team members e passa a ver só as oportunidades em que esse nome foi marcado (por padrão só a tela Oportunidades, sem editar). Qualquer usuário ligado a um team member também vê, além da própria carteira, as oportunidades em que foi marcado. No banco, `ve_opp(gerente, team_members)` alimenta as regras de leitura e edição das oportunidades, do histórico e dos anexos.
 - Renomear uma origem, um fabricante, um tipo de revenda ou um team member em *Listas de opções* atualiza as oportunidades que usavam o nome antigo.
@@ -52,7 +52,7 @@ Só quem tem a permissão Configurações vê e altera esta aba (por padrão, s�
 - **Metas:** período e meta de cada gerente para o ano escolhido no painel.
 - **Pré-vendas:** nome e e-mail de quem pode receber oportunidades enviadas pelo CRM.
 - **Forecast e riscos:** cobertura alvo, probabilidades da categoria sugerida e limites dos selos de risco.
-- **Listas de opções:** valores de cada campo de seleção (área de negócio, fabricante, parceiro, tipo de revenda, origem, team members, segmento do cliente, área e território do gerente). Cada opção pode ser incluída, editada, reordenada, desativada ou, se não estiver em uso, excluída. Opções desativadas somem dos formulários, mas continuam nos registros antigos.
+- **Listas de opções:** valores de cada campo de seleção (área de negócio, fabricante, parceiro, tipo de revenda, origem, segmento do cliente, área e território do gerente). Cada opção pode ser incluída, editada, reordenada, desativada ou, se não estiver em uso, excluída. Opções desativadas somem dos formulários, mas continuam nos registros antigos.
 
 ## Regras de cálculo (iguais às do dashboard anterior)
 
