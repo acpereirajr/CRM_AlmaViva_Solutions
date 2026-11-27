@@ -136,6 +136,7 @@ export const api = {
       const t = (r.team_members as string[]).map(x => (x === de ? para : x));
       const { error: e } = await sb.from('oportunidades').update({ team_members: [...new Set(t)] }).eq('numero', r.numero); if (e) throw e;
     }
+    const { error: e2 } = await sb.rpc('renomear_team_member', { de, para }); if (e2) throw e2;
   },
   // ---- acessos ----
   async papeis() {
@@ -154,12 +155,12 @@ export const api = {
   async usuarios() {
     const [{ data: ps, error: e1 }, { data: cs, error: e2 }] = await Promise.all([sb.from('perfis').select('*'), sb.from('convites').select('*')]);
     if (e1) throw e1; if (e2) throw e2;
-    const base = (r: any) => ({ nome: r.nome, email: r.email, papel: r.papel, gerente: r.gerente, areas: r.areas || [], permissoes: r.permissoes || {}, escopo: r.escopo, ativo: r.ativo !== false });
+    const base = (r: any) => ({ nome: r.nome, email: r.email, papel: r.papel, gerente: r.gerente, areas: r.areas || [], permissoes: r.permissoes || {}, escopo: r.escopo, ativo: r.ativo !== false, teamMember: r.team_member || null });
     return [...(ps || []).map((r: any) => ({ id: r.user_id, user_id: r.user_id, ...base(r) })),
             ...(cs || []).map((r: any) => ({ id: 'convite:' + r.email, pendente: true, ...base(r) }))];
   },
   async salvarUsuario(u: any) {
-    const d = { nome: u.nome, papel: u.papel, gerente: u.gerente || null, areas: u.areas || [], permissoes: u.permissoes || {}, escopo: u.escopo || null, ativo: u.ativo !== false };
+    const d = { nome: u.nome, papel: u.papel, gerente: u.gerente || null, areas: u.areas || [], permissoes: u.permissoes || {}, escopo: u.escopo || null, ativo: u.ativo !== false, team_member: u.teamMember || null };
     if (u.user_id) { const { error } = await sb.from('perfis').update(d).eq('user_id', u.user_id); if (error) throw error; return; }
     const email = String(u.email).trim().toLowerCase();
     const antigo = u.id && String(u.id).startsWith('convite:') ? String(u.id).slice(8) : null;

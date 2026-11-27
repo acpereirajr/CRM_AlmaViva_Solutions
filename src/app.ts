@@ -72,22 +72,23 @@ const PERMS=[
   {k:'criar_oportunidades',l:'Cadastrar oportunidades',g:'Ações'},{k:'editar_oportunidades',l:'Editar oportunidades',g:'Ações'},
   {k:'editar_clientes',l:'Cadastrar e editar clientes',g:'Ações'},{k:'editar_running',l:'Alterar o Running previsto',g:'Ações'},
   {k:'registrar_acoes',l:'Registrar ações na Reunião de forecast',g:'Ações'}];
-const ESCOPOS={proprio:'Só a própria carteira',area:'Gerentes das suas áreas',todos:'Todos os gerentes'};
+const ESCOPOS={proprio:'Só a própria carteira',area:'Gerentes das suas áreas',todos:'Todos os gerentes',marcadas:'Só as oportunidades em que é team member'};
 const TUDO=Object.fromEntries(PERMS.map(x=>[x.k,true]));
 const PAPEIS_PADRAO={
   admin:{nome:'Administrador',escopo:'todos',permissoes:{...TUDO}},
   diretor:{nome:'Diretor',escopo:'todos',permissoes:{...TUDO,configurar:false}},
-  gerente:{nome:'Gerente',escopo:'proprio',permissoes:{...TUDO,configurar:false,ver_reuniao:false,registrar_acoes:false}}};
+  gerente:{nome:'Gerente',escopo:'proprio',permissoes:{...TUDO,configurar:false,ver_reuniao:false,registrar_acoes:false}},
+  team:{nome:'Team member',escopo:'marcadas',permissoes:{ver_oportunidades:true}}};
 const TODAS_VIEWS=['painel','oportunidades','clientes','faturamento','relatorios','reuniao','config'];
 let VIEWS=[...TODAS_VIEWS], ACESSO={escopo:'todos',permissoes:{...TUDO},gerente:null,areas:[]}, GER_FIXO=null, ADMIN=false;
 const pode=k=>!!ACESSO.permissoes[k];
-const papeisAtuais=()=>S.papeis||PAPEIS_PADRAO;
+const papeisAtuais=()=>S.papeis?(S.papeis.team?S.papeis:{...S.papeis,team:PAPEIS_PADRAO.team}):PAPEIS_PADRAO;
 function calcAcesso(u){
   const t=papeisAtuais()[u.papel]||{escopo:'proprio',permissoes:{}};
   const perm={}; PERMS.forEach(x=>{const o=(u.permissoes||{})[x.k];perm[x.k]=(o===true||o===false)?o:(x.k in (t.permissoes||{}))?!!t.permissoes[x.k]:!!((PAPEIS_PADRAO[u.papel]||{permissoes:{}}).permissoes[x.k]);});
   if(u.papel==='admin')perm.configurar=true; // o administrador nunca fica trancado fora das Configurações
   if(u.ativo===false)PERMS.forEach(x=>{perm[x.k]=false;});
-  return {escopo:u.escopo||t.escopo||'proprio',permissoes:perm,gerente:u.gerente||null,areas:u.areas||[]};
+  return {escopo:u.escopo||t.escopo||'proprio',permissoes:perm,gerente:u.gerente||null,areas:u.areas||[],team:u.teamMember||u.team_member||null};
 }
 function aplicarAcesso(){
   ACESSO=calcAcesso(usuarioAtual());
@@ -98,6 +99,9 @@ function aplicarAcesso(){
   document.querySelectorAll('#nav a').forEach(a=>{a.hidden=!VIEWS.includes(a.getAttribute('href').slice(1));});
   $('#btnNovaOpp').hidden=!pode('criar_oportunidades'); $('#btnNovoCli').hidden=!pode('editar_clientes');
 }
+// Team member: além da carteira, o usuário vê as oportunidades em que foi marcado (e só elas, na carteira "marcadas")
+const marcado=o=>!!ACESSO.team&&(o.team||[]).includes(ACESSO.team);
+const inSelO=o=>inSel(o.gerente)||(marcado(o)&&(!!GER_FIXO||ACESSO.escopo==='marcadas'||!filtrando()||S.sel.has(o.gerente)));
 const visivel=g=>ACESSO.escopo==='todos'||g===ACESSO.gerente||(ACESSO.escopo==='area'&&ACESSO.areas.includes(areaDe(g)));
 const usuarioAtual=()=>({...perfil,id:perfil.user_id});
 /* ================= utilidades ================= */
@@ -132,7 +136,7 @@ const filtrando=()=>S.sel.size>0||S.areas.size>0;
 // gerentes que compõem a visão atual (gerentes e áreas escolhidos no painel)
 const gerSel=()=>uniq([...gerentesTodosSemFiltro(),...Object.keys(S.metas)]).filter(inSel);
 function areasTodas(){const a=opcoes('area_gerente');const usadas=uniq(gerentesTodos().map(areaDe));return [...a.filter(x=>usadas.includes(x)),...usadas.filter(x=>!a.includes(x))];}
-function selOpps(){return S.opps.filter(o=>inSel(o.gerente));}
+function selOpps(){return S.opps.filter(o=>inSelO(o));}
 function selFat(){return S.fat.filter(r=>inSel(r.gerente));}
 function metaSel(){const k=filtrando()?gerSel():Object.keys(S.metas).filter(visivel);return sum(k,g=>S.metas[g]||0);}
 function runKey(){return (filtrando()?gerSel().sort().join('|'):'todos')+'@'+S.ano;}
@@ -443,9 +447,9 @@ function renderPainel(){
 function renderOpps(){
   const q=$('#qOpp').value.trim().toLowerCase(), st=$('#fStatus').value;
   const gsv=filtrando()?gerSel():[];
-  $('#oppVisao').innerHTML=GER_FIXO?`Sua carteira: <b>${esc(GER_FIXO)}</b>`:!filtrando()?'Mostrando <b>todos os gerentes</b>. Para filtrar, escolha gerentes ou áreas no <a href="#painel">Painel</a>.':
+  $('#oppVisao').innerHTML=ACESSO.escopo==='marcadas'?`Oportunidades em que você é team member${ACESSO.team?`: <b>${esc(ACESSO.team)}</b>`:'. Seu usuário ainda não está ligado a um especialista; peça à administração do CRM.'}`:GER_FIXO?`Sua carteira: <b>${esc(GER_FIXO)}</b>`:!filtrando()?'Mostrando <b>todos os gerentes</b>. Para filtrar, escolha gerentes ou áreas no <a href="#painel">Painel</a>.':
     `Mostrando ${S.areas.size?`áreas <b>${esc([...S.areas].join(', '))}</b>, `:''}${gsv.length===1?'gerente':`${gsv.length} gerentes`} <b>${esc(gsv.length<=4?gsv.join(', '):gsv.slice(0,4).join(', ')+'…')}</b>. Escolha outros no <a href="#painel">Painel</a>.`;
-  let a=S.opps.filter(o=>inSel(o.gerente)&&(st==='abertas'?OPEN.has(o.status):st==='ganhas'?o.status===WON:true));
+  let a=S.opps.filter(o=>inSelO(o)&&(st==='abertas'?OPEN.has(o.status):st==='ganhas'?o.status===WON:true));
   const tmv=$('#fTeam').value,tms=uniq([...opcoes('team'),...S.opps.flatMap(o=>o.team||[])]).sort((x,y)=>x.localeCompare(y,'pt'));
   $('#fTeam').innerHTML=opts(tms,tmv,'Todos os team members');$('#fTeam').hidden=!tms.length;if(tmv)a=a.filter(o=>(o.team||[]).includes(tmv));
   if(q)a=a.filter(o=>[o.cliente,o.titulo,o.numero,o.software,o.parceiro,o.gerente,o.origemOpp,...(o.team||[])].join(' ').toLowerCase().includes(q));
@@ -658,7 +662,7 @@ async function renomearItem(id,n,v){const def=LISTAS_DEF.find(d=>d.id===id),it=l
   if(v===de){S.listaEd=null;renderListas();return;}
   if(it.some((i,k)=>k!==n&&i.v.toLowerCase()===v.toLowerCase())){toast('Essa opção já existe na lista.');return;}
   const q=def.ren?S.opps.filter(o=>temValor(o,def.ren,de)).length:0,uso=usoOpcao(def,de);it[n].v=v;S.listaEd=null;await gravarLista(id,it);
-  if(q){try{await renomearEmOpps(def.ren,de,v);toast(`Opção renomeada. ${nf(q)} oportunidade${q===1?'':'s'} atualizada${q===1?'':'s'}.`);}catch(err){toast('A lista foi salva, mas não foi possível atualizar as oportunidades.');}}
+  if(q||id==='team'){try{await renomearEmOpps(def.ren,de,v);toast(q?`Opção renomeada. ${nf(q)} oportunidade${q===1?'':'s'} atualizada${q===1?'':'s'}.`:'Opção renomeada.');}catch(err){toast('A lista foi salva, mas não foi possível atualizar as oportunidades.');}}
   else if(uso&&!def.ren)toast('Opção renomeada. Os registros que já usavam o nome antigo continuam com ele.');}
 const podeCfg=()=>ADMIN;
 async function renomearEmOpps(campo,de,para){await api.renomearOpcaoOpps(campo,de,para);await recarregar();}
@@ -669,14 +673,14 @@ const usoPapel=k=>S.usuarios.filter(u=>u.papel===k).length;
 function renderAcessos(){
   const P=papeisAtuais(),ks=Object.keys(P),ro=!ADMIN;
   const grupos=[...new Set(PERMS.map(x=>x.g))];
-  $('#tbPapeis').innerHTML=`<thead><tr><th>Permissão</th>${ks.map(k=>`<th class="c">${esc(P[k].nome)}${['admin','diretor','gerente'].includes(k)||usoPapel(k)?'':` <button class="ico" data-delpapel="${esc(k)}" aria-label="Excluir tipo" ${ro?'disabled':''}>✕</button>`}<div class="note">${nf(usoPapel(k))} usuário${usoPapel(k)===1?'':'s'}</div></th>`).join('')}</tr></thead><tbody>
+  $('#tbPapeis').innerHTML=`<thead><tr><th>Permissão</th>${ks.map(k=>`<th class="c">${esc(P[k].nome)}${['admin','diretor','gerente','team'].includes(k)||usoPapel(k)?'':` <button class="ico" data-delpapel="${esc(k)}" aria-label="Excluir tipo" ${ro?'disabled':''}>✕</button>`}<div class="note">${nf(usoPapel(k))} usuário${usoPapel(k)===1?'':'s'}</div></th>`).join('')}</tr></thead><tbody>
     <tr><td class="w"><b>Carteira que enxerga</b><div class="note">Quais gerentes aparecem no painel e nas listas</div></td>${ks.map(k=>`<td class="c"><select data-esc="${esc(k)}" ${ro?'disabled':''}>${Object.entries(ESCOPOS).map(([v,l])=>`<option value="${v}" ${P[k].escopo===v?'selected':''}>${l}</option>`).join('')}</select></td>`).join('')}</tr>
     ${grupos.map(g=>`<tr class="grp"><td colspan="${ks.length+1}">${esc(g)}</td></tr>`+PERMS.filter(x=>x.g===g).map(x=>`<tr><td class="w">${esc(x.l)}</td>${ks.map(k=>{const trava=k==='admin'&&x.k==='configurar';
       return `<td class="c"><input type="checkbox" data-perm="${esc(k)}|${x.k}" ${P[k].permissoes[x.k]?'checked':''} ${ro||trava?'disabled':''} ${trava?'title="O administrador sempre acessa as Configurações"':''}></td>`;}).join('')}</tr>`).join('')).join('')}</tbody>`;
   const usuarios=[...S.usuarios].sort((a,b)=>(a.ativo===false)-(b.ativo===false)||String(a.nome).localeCompare(String(b.nome),'pt'));
-  $('#tbUsuarios').innerHTML=`<thead><tr><th>Usuário</th><th>E-mail</th><th>Tipo</th><th>Gerente vinculado</th><th>Áreas</th><th>Carteira</th><th class="r">Exceções</th><th>Situação</th><th></th></tr></thead><tbody>${
+  $('#tbUsuarios').innerHTML=`<thead><tr><th>Usuário</th><th>E-mail</th><th>Tipo</th><th>Vínculo</th><th>Áreas</th><th>Carteira</th><th class="r">Exceções</th><th>Situação</th><th></th></tr></thead><tbody>${
     usuarios.map(u=>{const a=calcAcesso(u),ex=Object.keys(u.permissoes||{}).length+(u.escopo?1:0);
-      return `<tr><td class="w"><b>${esc(u.nome)}</b></td><td>${esc(u.email||'—')}</td><td>${esc((P[u.papel]||{}).nome||u.papel)}</td><td>${esc(u.gerente||'—')}</td><td>${esc((u.areas||[]).join(', ')||'—')}</td>
+      return `<tr><td class="w"><b>${esc(u.nome)}</b></td><td>${esc(u.email||'—')}</td><td>${esc((P[u.papel]||{}).nome||u.papel)}</td><td>${esc(u.gerente||(u.teamMember?'Team member: '+u.teamMember:'')||'—')}</td><td>${esc((u.areas||[]).join(', ')||'—')}</td>
       <td>${esc(ESCOPOS[a.escopo])}</td><td class="r">${ex?nf(ex):'—'}</td><td>${u.ativo===false?'<span class="tag off">Inativo</span>':u.pendente?'<span class="tag">Aguardando 1º acesso</span>':'Ativo'}</td>
       <td><button class="ico" data-usr="${esc(u.id)}">Editar</button></td></tr>`;}).join('')||`<tr><td colspan="9" class="note">Nenhum usuário cadastrado ainda. Use "Novo usuário".</td></tr>`}</tbody>`;
   ['#btnNovoTipo','#btnNovoUsr'].forEach(s=>$(s).disabled=ro);
@@ -707,6 +711,7 @@ function usuarioForm(u){
       <label class="full">Nome<input id="u_nome" required value="${esc(u.nome)}"></label>
       <label class="full">E-mail de acesso<input id="u_email" type="email" required value="${esc(u.email||'')}" ${!isNew&&u.user_id?'readonly':''}></label>
       <label>Tipo de usuário<select id="u_papel">${Object.entries(P).map(([k,t])=>`<option value="${esc(k)}" ${u.papel===k?'selected':''}>${esc(t.nome)}</option>`).join('')}</select></label>
+      <label>Team member vinculado<select id="u_team"><option value=""></option>${opts(uniq([...opcoes('team'),u.teamMember||'']),u.teamMember||'')}</select><span class="note">Vê as oportunidades em que este especialista foi marcado.</span></label>
       <label>Gerente vinculado<select id="u_ger"><option value=""></option>${opts(gs,u.gerente||'')}</select></label>
       <div class="full"><span class="note">Áreas (usadas quando a carteira é "Gerentes das suas áreas")</span><div class="chips">${areas.map(a=>`<label class="chip"><input type="checkbox" data-uarea value="${esc(a)}" ${(u.areas||[]).includes(a)?'checked':''}> ${esc(a)}</label>`).join('')}</div></div>
       <label class="full">Carteira que enxerga<select id="u_esc"><option value="">Igual ao tipo</option>${Object.entries(ESCOPOS).map(([v,l])=>`<option value="${v}" ${u.escopo===v?'selected':''}>${l}</option>`).join('')}</select></label>
@@ -724,11 +729,12 @@ function usuarioForm(u){
         const email=$('#u_email').value.trim().toLowerCase();
         if(isNew&&S.usuarios.some(x=>(x.email||'').toLowerCase()===email)){$('#u_err').textContent='Já existe um usuário com esse e-mail.';return;}
         const permissoes={};document.querySelectorAll('[data-tri]').forEach(s=>{if(s.value!=='')permissoes[s.dataset.tri]=s.value==='1';});
-        const papel=$('#u_papel').value,gerente=$('#u_ger').value||null,escopo=$('#u_esc').value||null;
+        const papel=$('#u_papel').value,gerente=$('#u_ger').value||null,escopo=$('#u_esc').value||null,teamMember=$('#u_team').value||null;
         const t=P[papel]||{};
+        if((escopo||t.escopo)==='marcadas'&&!teamMember){$('#u_err').textContent='Este usuário vê só as oportunidades em que é team member: escolha o team member vinculado.';return;}
         if((escopo||t.escopo)==='proprio'&&!gerente){$('#u_err').textContent='Este usuário vê só a própria carteira: escolha o gerente vinculado.';return;}
         if(u.id&&u.id===usuarioAtual().id&&papel!=='admin'&&permissoes.configurar!==true&&!(t.permissoes||{}).configurar){$('#u_err').textContent='Você tiraria o seu próprio acesso às Configurações.';return;}
-        const data={...u,nome:$('#u_nome').value.trim(),email,papel,gerente,escopo,areas:[...document.querySelectorAll('[data-uarea]:checked')].map(i=>i.value),permissoes,ativo:$('#u_ativo').checked};
+        const data={...u,nome:$('#u_nome').value.trim(),email,papel,gerente,escopo,teamMember,areas:[...document.querySelectorAll('[data-uarea]:checked')].map(i=>i.value),permissoes,ativo:$('#u_ativo').checked};
         try{await salvarUsuario(data);closeDrawer();toast(isNew?'Usuário cadastrado':'Usuário salvo');}catch(err){writeErr(err,'#u_err');}});});
 }
 async function salvarPapeis(P){await api.salvarPapeis(P);await recarregar('papeis');}
@@ -744,7 +750,7 @@ const DIMS={ger:{t:'gerente',T:'Gerente',f:o=>o.gerente,fg:g=>g},dir:{t:'diretor
 // fabricante no faturamento: a coluna TECNOLOGIA, casada com a lista de fabricantes sem diferença de maiúsculas e espaços
 const normFab=s=>String(s||'').normalize('NFKD').replace(/[^A-Za-z0-9]/g,'').toUpperCase();
 function fabFat(t){if(!String(t||'').trim())return 'Não informado';const n=normFab(t),c=[...opcoes('fabricante'),...S.opps.map(o=>o.software).filter(Boolean)].find(x=>normFab(x)===n);return c||String(t).trim();}
-const fcAno=()=>S.opps.filter(o=>inSel(o.gerente)&&OPEN.has(o.status)&&(o.fechamento||'').startsWith(S.ano));
+const fcAno=()=>S.opps.filter(o=>inSelO(o)&&OPEN.has(o.status)&&(o.fechamento||'').startsWith(S.ano));
 const medida=(a,m)=>m==='n'?a.length:m==='p'?sum(a,o=>vAno(o)*(Number(o.probabilidade)||0)/100):sum(a,vAno);
 const fmtMed=(v,m)=>m==='n'?nf(v):M(v);
 // Categoria de forecast: o gerente escolhe Commit, Best case ou Pipeline. Sem escolha, vale a sugestão pela probabilidade.

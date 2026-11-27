@@ -40,6 +40,7 @@ Padrão: o gerente vê só a própria carteira; o diretor escolhe uma ou várias
 - **Origem da oportunidade:** obrigatória nas oportunidades novas. Origens iniciais: Fabricante, Edital Publicado, Gerente de Conta, Diretor, Evento X e Evento Y. Cada origem pode pedir um detalhe (qual gerente, qual diretor, qual fabricante ou um texto livre); Gerente de Conta e Diretor já vêm pedindo. Ficam em `oportunidades.origem_oportunidade` e `origem_detalhe` (a coluna `origem` continua indicando se o registro veio do CRM ou da carga).
 - **Team members:** especialistas que trabalham na oportunidade além do gerente, um ou mais por oportunidade (`oportunidades.team_members`, lista de texto). A lista de especialistas começa vazia e é cadastrada em *Configurações > Listas de opções*. A tela de Oportunidades filtra por team member.
 - **Relatórios:** card *Origem das oportunidades* (pipeline aberto por origem e ganhas × perdidas com taxa de conversão) e visão *Origem* na tabela de forecast, em que o realizado é o valor das oportunidades ganhas, porque o faturamento não tem origem.
+- **Login de team members:** novo tipo de usuário *Team member*, com a carteira *Só as oportunidades em que é team member*. Em *Usuários e acessos*, o usuário é ligado a um nome da lista de team members e passa a ver só as oportunidades em que esse nome foi marcado (por padrão só a tela Oportunidades, sem editar). Qualquer usuário ligado a um team member também vê, além da própria carteira, as oportunidades em que foi marcado. No banco, `ve_opp(gerente, team_members)` alimenta as regras de leitura e edição das oportunidades, do histórico e dos anexos.
 - Renomear uma origem, um fabricante, um tipo de revenda ou um team member em *Listas de opções* atualiza as oportunidades que usavam o nome antigo.
 
 ## Configurações (aba do app)
@@ -63,7 +64,7 @@ Só quem tem a permissão Configurações vê e altera esta aba (por padrão, s�
 
 ## Como colocar no ar
 
-1. **Supabase.** Crie um projeto em [supabase.com](https://supabase.com), na região São Paulo. Em *SQL Editor*, rode os arquivos de `supabase/migrations/` na ordem do nome: `20261126000000_schema.sql`, `20261126010000_configuracoes.sql`, `20261126020000_acessos.sql`, `20261127000000_reuniao_forecast.sql`, `20261127010000_forecast.sql`, `20261127020000_anexos_envios.sql` e `20261128000000_origem_team.sql`.
+1. **Supabase.** Crie um projeto em [supabase.com](https://supabase.com), na região São Paulo. Em *SQL Editor*, rode os arquivos de `supabase/migrations/` na ordem do nome: `20261126000000_schema.sql`, `20261126010000_configuracoes.sql`, `20261126020000_acessos.sql`, `20261127000000_reuniao_forecast.sql`, `20261127010000_forecast.sql`, `20261127020000_anexos_envios.sql` `20261128000000_origem_team.sql` e `20261128010000_team_login.sql`.
 2. **Variáveis.** Copie `.env.example` para `.env` e preencha com os dados de *Project Settings > API*. A chave `service_role` só é usada pelo script de importação. Não a coloque no Vercel.
 3. **Carga inicial.** Rode na sua máquina, com as planilhas na pasta:
    ```bash
