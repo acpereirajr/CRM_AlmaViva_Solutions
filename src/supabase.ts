@@ -17,6 +17,8 @@ export function oppFromDb(r: any) {
     valorTotal: Number(r.valor_total) || 0, valorServico: Number(r.valor_servico) || 0, valorSoftware: Number(r.valor_software) || 0,
     faturamentoServico: Number(r.faturamento_servico) || 0, softwareAno: Number(r.software_ano) || 0,
     descServico: r.desc_servico, descProduto: r.desc_produto, observacoes: r.observacoes, origem: r.origem,
+    categoria: r.categoria || null, proximoPasso: r.proximo_passo || '', proximoPassoData: r.proximo_passo_data || null,
+    adiamentos: r.adiamentos || 0, etapaDesde: r.etapa_desde || null, atualizadoEm: r.atualizado_em || null,
   };
 }
 export function oppToDb(o: any, userId?: string) {
@@ -25,6 +27,8 @@ export function oppToDb(o: any, userId?: string) {
     revenda: o.revenda ?? null, software: o.software, parceiro: o.parceiro ?? null, cadastro: o.cadastro || null, fechamento: o.fechamento || null,
     probabilidade: o.probabilidade, valor_total: o.valorTotal, valor_servico: o.valorServico, valor_software: o.valorSoftware,
     faturamento_servico: o.faturamentoServico, software_ano: o.softwareAno, observacoes: o.observacoes ?? null,
+    // adiamentos e etapa_desde são calculados pelo banco (gatilho)
+    categoria: o.categoria || null, proximo_passo: o.proximoPasso || null, proximo_passo_data: o.proximoPassoData || null,
     atualizado_em: new Date().toISOString(), atualizado_por: userId ?? null,
   };
   if (o.numero) r.numero = o.numero;
@@ -160,6 +164,35 @@ export const api = {
     if (a.id) { const { error } = await sb.from('acoes').update(r).eq('id', a.id); if (error) throw error; return; }
     const { error } = await sb.from('acoes').insert({ ...r, criado_por: userId ?? null, criado_por_nome: a.criadoPorNome || null }); if (error) throw error;
   },
+  // ---- forecast: limites (categoria sugerida, cobertura, selos de risco) e fotos semanais do pipeline ----
+  async parametros() {
+    const { data, error } = await sb.from('parametros').select('valor').eq('chave', 'forecast').maybeSingle(); if (error) throw error;
+    return data?.valor || null;
+  },
+  async salvarParametros(v: Record<string, number>, userId?: string) {
+    const { error } = await sb.from('parametros').upsert({ chave: 'forecast', valor: v, atualizado_em: new Date().toISOString(), atualizado_por: userId ?? null });
+    if (error) throw error;
+  },
+  async tirarFoto() { const { error } = await sb.rpc('tirar_foto_pipeline'); if (error) throw error; },
+  // cabeçalhos de todas as fotos + itens só das que as comparações usam (semana passada, 4 semanas, primeira)
+  async fotos(hoje: string) {
+    const { data, error } = await sb.from('fotos_pipeline').select('semana,data').order('data'); if (error) throw error;
+    const fs = (data || []).map((f: any) => ({ id: f.semana, data: f.data, itens: null as any }));
+    const dias = (d: string) => Math.round((+new Date(hoje) - +new Date(d)) / 864e5);
+    const ult = (min: number) => [...fs].reverse().find(f => dias(f.data) >= min);
+    const quer = [...new Set([ult(6), ult(27), fs.find(f => dias(f.data) >= 1)].filter(Boolean).map((f: any) => f.id))];
+    if (quer.length) {
+      const out: any[] = []; const passo = 1000;
+      for (let de = 0; ; de += passo) {
+        const { data: it, error: e2 } = await sb.from('fotos_pipeline_itens').select('semana,numero,gerente,status,categoria,valor,fechamento,probabilidade')
+          .in('semana', quer).order('semana').order('numero').range(de, de + passo - 1);
+        if (e2) throw e2; out.push(...it); if (it.length < passo) break;
+      }
+      for (const f of fs) if (quer.includes(f.id)) f.itens = out.filter(i => i.semana === f.id)
+        .map(i => [Number(i.numero), i.gerente, i.status, i.categoria, Number(i.valor) || 0, i.fechamento, i.probabilidade ?? 0]);
+    }
+    return fs;
+  },
   async gerentes() {
     const { data, error } = await sb.from('gerentes').select('*').order('nome'); if (error) throw error;
     return data || [];
@@ -191,6 +224,8 @@ export const api = {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'gerentes' }, () => fn('gerentes'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'metas' }, () => fn('metas'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'opcoes' }, () => fn('opcoes'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'parametros' }, () => fn('parametros'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'fotos_pipeline' }, () => fn('fotos_pipeline'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'papeis' }, () => fn('papeis'))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'acoes' }, () => fn('acoes'))
       .subscribe();

@@ -19,9 +19,13 @@ Padrão: o gerente vê só a própria carteira; o diretor escolhe uma ou várias
 
 ## Relatórios e Reunião de forecast
 
-- **Relatórios:** forecast por gerente, por diretor e por área, no total do ano ou por quarter, medido por valor no ano, valor ponderado (× probabilidade) ou quantidade. Clique numa linha ou célula para ver as oportunidades. Segue a seleção do painel e a carteira do usuário.
-- **Reunião de forecast:** para a diretoria conduzir a reunião com cada gerente. Mostra meta, realizado, forecast e gap do gerente, dois gráficos 3D interativos (forecast por gerente e quarter; oportunidades por dias até o fechamento × probabilidade × valor) e o registro de **ações** por oportunidade e por gerente, com responsável, prazo e conclusão.
-- O diretor de cada gerente é definido em *Configurações > Gerentes de negócios*; os nomes dos diretores ficam em *Listas de opções > Diretor comercial*.
+- **Categoria de forecast:** cada oportunidade aberta é **Commit** (o gerente garante), **Best case** (pode entrar) ou **Pipeline**. Sem escolha do gerente, vale a sugestão pela probabilidade (Commit a partir de 90%, Best case a partir de 70%). Etapa ganha = **Fechado**.
+- **Cobertura de pipeline:** pipeline aberto do período ÷ o que falta da meta (meta − realizado nas notas). Verde a partir do alvo (3x), amarelo a partir de 2/3 dele, vermelho abaixo.
+- **Selos de risco:** data vencida, adiada 2 vezes ou mais, sem atualização há 30 dias, parada na etapa (60 dias e acima de 1,5 × a média da etapa) e valor alto (R$ 1 milhão no ano) sem próximo passo nem ação aberta. Todos os limites ficam em *Configurações > Forecast e riscos*. O banco conta os adiamentos e a data de entrada na etapa por gatilho.
+- **Foto semanal do pipeline:** toda segunda às 6h o banco grava o pipeline inteiro (pg_cron); se o agendamento não estiver ativo, a foto é tirada no primeiro acesso da semana. As fotos alimentam a cascata "o que mudou" e a pauta da reunião.
+- **Relatórios:** por gerente, diretor ou área, no ano ou num quarter: indicadores (meta, realizado, Commit, Realizado + Commit, Best case, pipeline aberto, cobertura, oportunidades em risco), gráfico de previsão × meta (em R$ ou % da meta), previsão por quarter, pipeline por etapa (valor e ponderado), tabela de cobertura, cobertura por quarter, cascata "o que mudou" contra a foto da semana passada, de 4 semanas ou a primeira, e a lista de oportunidades em risco. Exporta a tabela e as oportunidades em CSV (abre no Excel).
+- **Reunião de forecast:** pauta automática (top negócios do quarter, riscos, o que mudou, ações pendentes, com botão para copiar), indicadores do gerente, gráficos 2D (padrão) ou 3D, oportunidades com categoria e selos, e o registro de **ações** por oportunidade e por gerente.
+- O diretor de cada gerente é definido em *Configurações > Gerentes de negócios*. Hoje: Cassiano (Antonio C Pereira, Marcelo Costa, Orlando Junior, Bruno Cardoso, Juliana C Ferreira), Hussem (Reginaldo C Oliveira, Bruna Hausemer, Marcus Rondon, Jefferson M Santos) e Adriano (Daniele Freire). Cassiano e Hussem também podem ter oportunidades próprias.
 - Permissões: `ver_relatorios`, `ver_reuniao` e `registrar_acoes`. Por padrão, gerentes veem Relatórios (só a própria carteira) mas não a Reunião.
 
 ## Configurações (aba do app)
@@ -31,6 +35,7 @@ Só quem tem a permissão Configurações vê e altera esta aba (por padrão, s�
 - **Etapas das oportunidades:** nome, ordem, tipo (Em aberto, Ganha, Perdida), probabilidade padrão e se está ativa. "Em aberto" entra no forecast, a única etapa "Ganha" entra no pipeline ganho. Uma etapa em uso não pode ser renomeada nem excluída, só desativada.
 - **Gerentes de negócios:** e-mail, área, território, meta do ano e situação. Gerentes inativos saem da seleção do painel e dos formulários.
 - **Metas:** período e meta de cada gerente para o ano escolhido no painel.
+- **Forecast e riscos:** cobertura alvo, probabilidades da categoria sugerida e limites dos selos de risco.
 - **Listas de opções:** valores de cada campo de seleção (área de negócio, fabricante, parceiro, tipo de revenda, segmento do cliente, área e território do gerente). Opções desativadas somem dos formulários, mas continuam nos registros antigos.
 
 ## Regras de cálculo (iguais às do dashboard anterior)
@@ -43,7 +48,7 @@ Só quem tem a permissão Configurações vê e altera esta aba (por padrão, s�
 
 ## Como colocar no ar
 
-1. **Supabase.** Crie um projeto em [supabase.com](https://supabase.com), na região São Paulo. Em *SQL Editor*, rode os arquivos de `supabase/migrations/` na ordem do nome: `20261126000000_schema.sql`, `20261126010000_configuracoes.sql`, `20261126020000_acessos.sql` e `20261127000000_reuniao_forecast.sql`.
+1. **Supabase.** Crie um projeto em [supabase.com](https://supabase.com), na região São Paulo. Em *SQL Editor*, rode os arquivos de `supabase/migrations/` na ordem do nome: `20261126000000_schema.sql`, `20261126010000_configuracoes.sql`, `20261126020000_acessos.sql`, `20261127000000_reuniao_forecast.sql` e `20261127010000_forecast.sql`.
 2. **Variáveis.** Copie `.env.example` para `.env` e preencha com os dados de *Project Settings > API*. A chave `service_role` só é usada pelo script de importação. Não a coloque no Vercel.
 3. **Carga inicial.** Rode na sua máquina, com as planilhas na pasta:
    ```bash

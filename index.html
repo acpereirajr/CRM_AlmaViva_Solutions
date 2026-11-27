@@ -211,25 +211,32 @@
   <section class="view" id="v-relatorios" hidden style="margin-top:22px">
     <div class="card-head" style="margin:0;flex-wrap:wrap;gap:10px"><div><span class="eyebrow">Forecast</span><h2>Relatórios</h2></div>
       <div class="toolbar"><label class="note">Ano <select id="rAno"></select></label>
-        <div class="seg" id="rModo" role="group" aria-label="Visão"><button data-m="ano" aria-pressed="true">Ano</button><button data-m="tri" aria-pressed="false">Por quarter</button></div>
-        <label class="note">Medida <select id="rMed"><option value="v">Valor no ano</option><option value="p">Valor ponderado</option><option value="n">Quantidade</option></select></label></div></div>
+        <div class="seg" id="rPer" role="group" aria-label="Período"><button data-v="ano">Ano</button><button data-v="0">Q1</button><button data-v="1">Q2</button><button data-v="2">Q3</button><button data-v="3">Q4</button></div>
+        <div class="seg" id="rDim" role="group" aria-label="Visão"><button data-v="ger">Gerente</button><button data-v="dir">Diretor</button><button data-v="area">Área</button></div></div></div>
     <div class="banner" id="rVisao" style="margin-top:12px"></div>
     <div class="grid g4" id="rKpis"></div>
-    <p class="note" style="margin:4px 0 0">Forecast = oportunidades em etapas "em aberto" com fechamento no ano, pelo valor no ano (serviço + software no ano). Clique numa linha ou célula para ver as oportunidades.</p>
-    <div class="card"><h3>Forecast por gerente</h3><div id="rGer" style="margin-top:10px"></div></div>
-    <div class="card"><h3>Forecast por diretor</h3><div class="sub">Diretor de cada gerente, definido em Configurações > Gerentes de negócios.</div><div id="rDir" style="margin-top:10px"></div></div>
-    <div class="card"><h3>Forecast por área</h3><div class="sub">Área de cada gerente, definida em Configurações > Gerentes de negócios.</div><div id="rArea" style="margin-top:10px"></div></div>
+    <div class="card"><div class="card-head" style="margin:0"><div><h3 id="rMetaTit"></h3><div class="sub">Realizado (notas emitidas) + Commit + Best case + Pipeline contra a meta (marca vermelha). Clique numa barra para ver as oportunidades.</div></div><div class="seg" id="rEsc" role="group" aria-label="Escala"><button data-v="valor">R$</button><button data-v="pct">% da meta</button></div></div><div id="rChMeta" class="ec"></div></div>
+    <div class="grid g2">
+      <div class="card"><h3>Previsão por quarter</h3><div class="sub" id="rQSub"></div><div id="rChQ" class="ec" style="height:330px"></div></div>
+      <div class="card"><h3>Pipeline por etapa</h3><div class="sub">Valor no ano e valor ponderado pela probabilidade da etapa. Embaixo do nome: probabilidade e quantidade.</div><div id="rChEt" class="ec" style="height:330px"></div></div>
+    </div>
+    <div class="card" style="padding:0"><div class="card-head" style="padding:18px 18px 0"><div><h3 id="rTabTit"></h3><div class="sub" id="rTabSub"></div></div><button class="ghost" id="rExpTab">Exportar planilha</button></div><div class="scroll"><table id="rTab" class="rel"></table></div></div>
+    <div class="card"><h3 id="rCobQTit"></h3><div class="sub">Pipeline aberto do quarter ÷ o que falta da meta do quarter (¼ da meta anual). Quarter encerrado mostra quanto da meta foi atingido. Clique numa célula para ver as oportunidades.</div><div id="rCobQ" style="margin-top:10px"></div></div>
+    <div class="card"><div class="card-head"><div><h3>O que mudou no pipeline</h3><div class="sub" id="rCasSub"></div></div><label class="note">Comparar com <select id="rBase"><option value="semana">a foto da semana passada</option><option value="4sem">a foto de 4 semanas atrás</option><option value="inicio">a primeira foto</option></select></label></div><div id="rCas"></div></div>
+    <div class="card" style="padding:0"><div class="card-head" style="padding:18px 18px 0"><div><h3 id="rRiscoTit"></h3><div class="sub" id="rRiscoSub"></div></div><button class="ghost" id="rExpOpp">Exportar oportunidades</button></div><div class="scroll" style="max-height:60vh"><table id="rRisco"></table></div></div>
     <div class="card" id="rDetCard" hidden style="padding:0"><div class="card-head" style="padding:18px 18px 0"><h3 id="rDetTit"></h3><button class="ghost" id="rDetFechar">Fechar</button></div><div class="scroll"><table id="rDet"></table></div></div>
   </section>
 
   <!-- REUNIÃO DE FORECAST -->
   <section class="view" id="v-reuniao" hidden style="margin-top:22px">
     <div class="card-head" style="margin:0;flex-wrap:wrap;gap:10px"><div><span class="eyebrow">Reunião de forecast</span><h2 id="mTit">Reunião de forecast</h2></div>
-      <div class="toolbar"><label class="note">Gerente <select id="mGer"></select></label><label class="note">Ano <select id="mAno"></select></label></div></div>
+      <div class="toolbar"><label class="note">Gerente <select id="mGer"></select></label><label class="note">Ano <select id="mAno"></select></label>
+        <div class="seg" id="mModo" role="group" aria-label="Gráficos"><button data-v="2d">2D</button><button data-v="3d">3D</button></div></div></div>
     <div class="grid g5" id="mKpis" style="margin-top:12px"></div>
+    <div class="card pauta"><div class="card-head"><div><span class="eyebrow">Pauta automática</span><h3 id="mPautaTit">Pauta da reunião</h3><div class="sub">Montada com os dados do gerente: o que fecha no quarter, o que está em risco, o que mudou desde a última foto e o que ficou combinado.</div></div><button class="ghost" id="mCopiar">Copiar pauta</button></div><div class="grid g4" id="mPauta"></div></div>
     <div class="grid g2">
-      <div class="card"><h3>Forecast por gerente e quarter</h3><div class="sub">Arraste para girar, role para aproximar. Clique numa barra para trocar de gerente. Em laranja, o gerente da reunião.</div><div id="m3dBar" class="chart3d"></div></div>
-      <div class="card"><h3>Oportunidades do gerente em 3D</h3><div class="sub">Dias até o fechamento × probabilidade × valor no ano. Cor = etapa, tamanho = valor. Clique num ponto para registrar ações.</div><div id="m3dOpp" class="chart3d"></div></div>
+      <div class="card"><h3 id="mChATit"></h3><div class="sub" id="mChASub"></div><div id="m3dBar" class="ec" style="height:420px"></div></div>
+      <div class="card"><h3 id="mChBTit"></h3><div class="sub" id="mChBSub"></div><div id="m3dOpp" class="ec" style="height:420px"></div></div>
     </div>
     <div class="grid g2">
       <div class="card"><h3>Ações do gerente</h3><div class="sub">Combinados com o gerente que não são de uma oportunidade específica.</div><ul class="acoes" id="mAcGer"></ul><div id="mAcGerForm"></div></div>
@@ -246,6 +253,7 @@
       <button data-cfg="gerentes" role="tab">Gerentes de negócios</button>
       <button data-cfg="metas" role="tab">Metas</button>
       <button data-cfg="listas" role="tab">Listas de opções</button>
+      <button data-cfg="forecast" role="tab">Forecast e riscos</button>
       <button data-cfg="acessos" role="tab">Usuários e acessos</button>
     </div>
     <div id="cfg-etapas" class="cfg-pane card" style="padding:0">
@@ -272,6 +280,11 @@
     <div id="cfg-listas" class="cfg-pane" hidden>
       <p class="note" style="margin:0 0 10px">Opções dos campos de seleção. Opções desativadas somem dos formulários, mas continuam nos registros antigos. Uma opção em uso não pode ser excluída, só desativada.</p>
       <div class="grid listas-grid" id="listasGrid"></div>
+    </div>
+    <div id="cfg-forecast" class="cfg-pane card" hidden>
+      <div class="card-head" style="margin:0"><div><h3>Forecast e riscos</h3><div class="sub">Limites da categoria sugerida, da cobertura de pipeline e dos selos de risco. Valem para todo o CRM.</div></div></div>
+      <form id="parF"><div id="parGrid"></div><div class="err" id="par_err"></div>
+        <div class="actions"><button type="button" class="ghost" id="par_reset">Voltar ao padrão</button><button class="blue" id="par_save">Salvar limites</button></div></form>
     </div>
     <div id="cfg-acessos" class="cfg-pane" hidden>
       <div class="card" style="padding:0">

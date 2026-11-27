@@ -48,7 +48,7 @@ const MESL=['janeiro','fevereiro','março','abril','maio','junho','julho','agost
 const HIDE_GER=new Set(['Sem gerente','Parcerias']);
 const TODAY=new Date(); const TODAY_ISO=TODAY.toISOString().slice(0,10);
 
-const S:any={acoes:[],rel:{modo:'ano',med:'v',det:null},reu:{ger:''},papeis:null,usuarios:[],areas:new Set(),listas:null,opps:[],clientes:[],fat:[],metas:{},metasDoc:{},gerCad:[],cfg:'etapas',running:{},readOnly:false,loaded:{o:false,c:false},
+const S:any={acoes:[],rel:{per:'ano',dim:'ger',base:'semana',esc:'pct',det:null},reu:{ger:'',modo:(()=>{try{return localStorage.getItem('crm-reu-modo')==='3d'?'3d':'2d';}catch(e){return '2d';}})()},fotos:[],param:null,papeis:null,usuarios:[],areas:new Set(),listas:null,opps:[],clientes:[],fat:[],metas:{},metasDoc:{},gerCad:[],cfg:'etapas',running:{},readOnly:false,loaded:{o:false,c:false},
   sel:new Set(),ano:'2026',p:{cli:'',fab:'',area:'',res:'gp'},sim:{pct:60,ex:false},evFab:'',
   f:{q:'',per:'',ger:'',cli:'',tec:'',tip:'',bu:'',ter:'',st:'',page:0}};
 
@@ -440,7 +440,7 @@ function renderOpps(){
   a=[...a].sort((x,y)=>(x.fechamento||'9').localeCompare(y.fechamento||'9'));
   $('#oppCount').textContent=`${a.length} oportunidades · total ${M(sum(a,o=>o.valorTotal))} · no ano ${M(sum(a,vAno))}`;
   $('#tbOpp').innerHTML=`<thead><tr><th>Nº</th><th>Fechamento</th><th>Gerente</th><th>Cliente</th><th>Fabricante</th><th>Oportunidade</th><th>Área</th><th>Etapa</th><th class="r">Valor total</th><th class="r">Valor no ano</th><th class="r">Prob.</th></tr></thead><tbody>`+
-    a.map(o=>`<tr class="click" data-opp="${esc(o.id)}"><td><b>${esc(o.numero)}</b></td><td>${esc(mesAno(o.fechamento))}</td><td>${esc(o.gerente)}</td><td class="w"><b>${esc(o.cliente)}</b></td><td>${esc(fab(o))}</td><td class="w">${esc(o.titulo)}</td><td class="w">${esc(o.area||'')}</td><td>${tagSt(o.status)}</td><td class="r"><b>${esc(brl(o.valorTotal))}</b></td><td class="r">${esc(brl(vAno(o)))}</td><td class="r">${esc(o.probabilidade)}%</td></tr>`).join('')+'</tbody>';
+    a.map(o=>`<tr class="click" data-opp="${esc(o.id)}"><td><b>${esc(o.numero)}</b></td><td>${esc(mesAno(o.fechamento))}</td><td>${esc(o.gerente)}</td><td class="w"><b>${esc(o.cliente)}</b></td><td>${esc(fab(o))}</td><td class="w">${esc(o.titulo)}</td><td class="w">${esc(o.area||'')}</td><td>${tagSt(o.status)} ${catTag(o)}${(n=>n?` <span class="selo s-venc" title="${esc(riscos(o).map(r=>r.l).join(' · '))}">${n} risco${n>1?'s':''}</span>`:'')(riscos(o).length)}</td><td class="r"><b>${esc(brl(o.valorTotal))}</b></td><td class="r">${esc(brl(vAno(o)))}</td><td class="r">${esc(o.probabilidade)}%</td></tr>`).join('')+'</tbody>';
 }
 
 /* ================= clientes ================= */
@@ -497,9 +497,9 @@ $('#fPrev').addEventListener('click',()=>{S.f.page--;renderFat();});$('#fNext').
 /* ================= configurações ================= */
 function renderConfig(){
   document.querySelectorAll('#cfgTabs button').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.cfg===S.cfg)));
-  ['etapas','gerentes','metas','listas','acessos'].forEach(k=>{$('#cfg-'+k).hidden=k!==S.cfg;});
+  ['etapas','gerentes','metas','listas','forecast','acessos'].forEach(k=>{$('#cfg-'+k).hidden=k!==S.cfg;});
   const ro=!ADMIN; ['#btnNovaEtapa','#btnNovoGer','#m_save'].forEach(s=>$(s).disabled=ro);
-  ({etapas:renderEtapas,gerentes:renderGerCad,metas:renderMetasCfg,listas:renderListas,acessos:renderAcessos})[S.cfg]();
+  ({etapas:renderEtapas,gerentes:renderGerCad,metas:renderMetasCfg,listas:renderListas,forecast:renderParamCfg,acessos:renderAcessos})[S.cfg]();
 }
 $('#cfgTabs').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.cfg=b.dataset.cfg;renderConfig();});
 const usoEtapa=k=>S.opps.filter(o=>o.status===k).length;
@@ -708,56 +708,255 @@ function usuarioForm(u){
 async function salvarPapeis(P){await api.salvarPapeis(P);await recarregar('papeis');}
 async function salvarUsuario(u){await api.salvarUsuario(u);await recarregar('usuarios');}
 
-/* ================= relatórios ================= */
+/* ================= forecast: categoria, cobertura, riscos e fotos semanais ================= */
 const QL=['1º tri','2º tri','3º tri','4º tri'];
+const QC=['Q1','Q2','Q3','Q4'];
 const diretorDe=g=>(S.gerCad.find(x=>x.nome===g)||{}).diretor||'Sem diretor';
-const DIMS={ger:{t:'gerente',f:o=>o.gerente},dir:{t:'diretor',f:o=>diretorDe(o.gerente)},area:{t:'área',f:o=>areaDe(o.gerente)}};
+const DIMS={ger:{t:'gerente',T:'Gerente',f:o=>o.gerente,fg:g=>g},dir:{t:'diretor',T:'Diretor',f:o=>diretorDe(o.gerente),fg:g=>diretorDe(g)},area:{t:'área',T:'Área',f:o=>areaDe(o.gerente),fg:g=>areaDe(g)}};
 const fcAno=()=>S.opps.filter(o=>inSel(o.gerente)&&OPEN.has(o.status)&&(o.fechamento||'').startsWith(S.ano));
 const medida=(a,m)=>m==='n'?a.length:m==='p'?sum(a,o=>vAno(o)*(Number(o.probabilidade)||0)/100):sum(a,vAno);
 const fmtMed=(v,m)=>m==='n'?nf(v):M(v);
-function agrupar(opps,f){const g={};opps.forEach(o=>{const k=f(o)||'—';(g[k]=g[k]||[]).push(o);});return g;}
+// Categoria de forecast: o gerente escolhe Commit, Best case ou Pipeline. Sem escolha, vale a sugestão pela probabilidade.
+const CATS=['Commit','Best case','Pipeline'];
+const SERIES=['Realizado','Commit','Best case','Pipeline'];
+const PARAM_PADRAO={coberturaAlvo:3,commitProb:90,bestProb:70,diasSemAtualizacao:30,adiamentosMax:2,diasEtapa:60,fatorMedia:1.5,valorAlto:1000000};
+const PARAM_DEF=[
+  {k:'coberturaAlvo',l:'Cobertura alvo (x)',s:'Pipeline aberto ÷ o que falta da meta. Verde a partir deste valor, amarelo a partir de 2/3 dele.',step:0.1},
+  {k:'commitProb',l:'Sugerir Commit a partir de (%)',s:'Probabilidade a partir da qual a categoria sugerida é Commit.',step:5},
+  {k:'bestProb',l:'Sugerir Best case a partir de (%)',s:'Abaixo disso, a sugestão é Pipeline.',step:5},
+  {k:'diasSemAtualizacao',l:'Sem atualização (dias)',s:'Selo "Sem atualização" quando a oportunidade não é alterada há esse tempo.',step:1},
+  {k:'adiamentosMax',l:'Adiada (vezes)',s:'Selo "Adiada" quando a data de fechamento foi empurrada esse número de vezes.',step:1},
+  {k:'diasEtapa',l:'Parada na etapa (dias, mínimo)',s:'Selo quando passa deste tempo na mesma etapa e também acima da média da etapa.',step:1},
+  {k:'fatorMedia',l:'Acima da média da etapa (fator)',s:'1,5 = 50% acima do tempo médio das oportunidades na mesma etapa.',step:0.1},
+  {k:'valorAlto',l:'Valor alto (R$ no ano)',s:'Selo "Sem próximo passo" para oportunidades deste valor sem próximo passo nem ação aberta.',step:100000}];
+const param=()=>({...PARAM_PADRAO,...(S.param||{})});
+const catSugerida=o=>{const p=param(),pr=Number(o.probabilidade)||0;return pr>=p.commitProb?'Commit':pr>=p.bestProb?'Best case':'Pipeline';};
+const catDe=o=>o.status===WON?'Fechado':!OPEN.has(o.status)?null:(CATS.includes(o.categoria)?o.categoria:catSugerida(o));
+const catTag=o=>{const c=catDe(o);if(!c)return '';const sug=c!=='Fechado'&&!CATS.includes(o.categoria);
+  return `<span class="cat k-${slug(c)}" title="${sug?'Sugerida pela probabilidade. O gerente ainda não definiu.':'Definida pelo gerente'}">${esc(c)}${sug?' <i>sug.</i>':''}</span>`;};
+const dia=s=>String(s||'').slice(0,10);
+const diasEntre=(a,b)=>Math.round((new Date(b)-new Date(a))/864e5);
+const maxD=(...a)=>a.filter(Boolean).sort().pop()||TODAY_ISO;
+// início do uso do CRM: a primeira foto. Para a carga inicial, os relógios de risco contam a partir dela.
+const inicioCRM=()=>S.fotos.length?S.fotos.map(f=>f.data).sort()[0]:TODAY_ISO;
+const ultimaAtualizacao=o=>maxD(dia(o.atualizadoEm)||dia(o.cadastro),inicioCRM());
+const naEtapaDesde=o=>maxD(dia(o.etapaDesde)||dia(o.cadastro),inicioCRM());
+let _mE={k:null,n:-1,v:{}};
+function mediaEtapa(st){if(_mE.k!==S.opps||_mE.n!==S.fotos.length){const g={};
+    S.opps.filter(o=>OPEN.has(o.status)).forEach(o=>{(g[o.status]=g[o.status]||[]).push(diasEntre(naEtapaDesde(o),TODAY_ISO));});
+    _mE={k:S.opps,n:S.fotos.length,v:Object.fromEntries(Object.entries(g).map(([s,a])=>[s,a.reduce((x,y)=>x+y,0)/a.length]))};}
+  return _mE.v[st]||0;}
+function riscos(o){
+  if(!OPEN.has(o.status))return [];const p=param(),r=[];
+  if(o.fechamento&&o.fechamento<TODAY_ISO)r.push({k:'venc',l:'Data vencida',t:`O fechamento previsto (${fmtD(o.fechamento)}) já passou`});
+  const ad=Number(o.adiamentos)||0;if(ad>=p.adiamentosMax)r.push({k:'adiada',l:`Adiada ${ad}x`,t:`A data de fechamento foi empurrada ${ad} vezes`});
+  const ua=ultimaAtualizacao(o),su=diasEntre(ua,TODAY_ISO);if(su>=p.diasSemAtualizacao)r.push({k:'parada',l:`Sem atualização há ${su} dias`,t:`Última alteração em ${fmtD(ua)}`});
+  const de=diasEntre(naEtapaDesde(o),TODAY_ISO),me=mediaEtapa(o.status);
+  if(de>=p.diasEtapa&&de>me*p.fatorMedia)r.push({k:'etapa',l:`${de} dias na etapa`,t:`Em ${o.status} há ${de} dias. A média da etapa é ${Math.round(me)} dias.`});
+  if(vAno(o)>=p.valorAlto&&!String(o.proximoPasso||'').trim()&&!acoesOpp(o.numero).some(a=>a.status!=='concluida'))r.push({k:'passo',l:'Sem próximo passo',t:`${M(vAno(o))} no ano sem próximo passo nem ação aberta`});
+  return r;}
+const selos=o=>riscos(o).map(x=>`<span class="selo s-${x.k}" title="${esc(x.t)}">${esc(x.l)}</span>`).join('');
+// ---- fotos semanais do pipeline ----
+const semanaISO=d=>{const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));const dn=t.getUTCDay()||7;t.setUTCDate(t.getUTCDate()+4-dn);
+  const y=t.getUTCFullYear();return y+'-W'+String(Math.ceil(((t-Date.UTC(y,0,1))/864e5+1)/7)).padStart(2,'0');};
+const SEMANA=semanaISO(TODAY);
+const fotoItem=o=>[o.numero,o.gerente,o.status,catDe(o),vAno(o),o.fechamento||null,Number(o.probabilidade)||0];
+const BASES={semana:{l:'a foto da semana passada',d:6},'4sem':{l:'a foto de 4 semanas atrás',d:27},inicio:{l:'a primeira foto',d:1}};
+function fotoBase(modo){const f=S.fotos.filter(x=>x.itens).sort((a,b)=>a.data.localeCompare(b.data));
+  if(modo==='inicio')return f.length&&diasEntre(f[0].data,TODAY_ISO)>=1?f[0]:null;
+  const c=f.filter(x=>diasEntre(x.data,TODAY_ISO)>=BASES[modo].d);return c.length?c[c.length-1]:null;}
+const inPer=(d,P)=>!!d&&d.startsWith(S.ano)&&(P==='ano'||quarter(d)===+P);
+const PASSOS=[['novas','Novas',1],['entrou','Entraram no período',1],['aumento','Aumentos de valor',1],['reducao','Reduções de valor',-1],['saiu','Adiadas para fora',-1],['ganhas','Ganhas',-1],['perdidas','Perdidas ou encerradas',-1]];
+// compara o pipeline aberto do período (P) com uma foto. fg filtra o gerente.
+function mudancas(foto,P,fg){
+  const prev=new Map(),fm=new Map(),cur=new Map(),om=new Map(S.opps.map(o=>[String(o.numero),o]));
+  foto.itens.forEach(([n,g,st,cat,v,fe,pr])=>{const i={g,st,cat,v:Number(v)||0,fe,pr};fm.set(String(n),i);if(fg(g)&&OPEN.has(st)&&inPer(fe,P))prev.set(String(n),i.v);});
+  S.opps.forEach(o=>{if(fg(o.gerente)&&OPEN.has(o.status)&&inPer(o.fechamento,P))cur.set(String(o.numero),vAno(o));});
+  const B=Object.fromEntries(PASSOS.map(([k])=>[k,0])),itens=[];
+  const nums=new Set([...prev.keys(),...cur.keys()]);
+  // mudanças sem efeito no valor (etapa, categoria, data dentro do período) também entram na lista
+  om.forEach((o,n)=>{const f=fm.get(n);if(f&&fg(o.gerente)&&OPEN.has(o.status)&&inPer(o.fechamento,P)&&(f.st!==o.status||f.cat!==catDe(o)||f.fe!==(o.fechamento||null)))nums.add(n);});
+  nums.forEach(n=>{const p=prev.get(n)||0,c=cur.get(n)||0,hp=prev.has(n),hc=cur.has(n),f=fm.get(n),o=om.get(n);let k=null;
+    if(hp&&hc)k=c>p?'aumento':c<p?'reducao':null;
+    else if(hc)k=f&&OPEN.has(f.st)&&fg(f.g)?'entrou':'novas';
+    else if(hp)k=o&&o.status===WON?'ganhas':!o||!OPEN.has(o.status)?'perdidas':'saiu';
+    if(k)B[k]+=c-p;
+    const tx=[];
+    if(k==='novas')tx.push(f?'Voltou ao pipeline':'Nova oportunidade');
+    if(k==='ganhas')tx.push('Ganha');if(k==='perdidas')tx.push(o?'Encerrada ('+o.status+')':'Removida');
+    if(f&&o&&f.st!==o.status&&k!=='ganhas'&&k!=='perdidas')tx.push(`${f.st} → ${o.status}`);
+    if(f&&o&&f.fe!==(o.fechamento||null)&&f.fe&&o.fechamento)tx.push(`fechamento ${fmtD(f.fe)} → ${fmtD(o.fechamento)}${o.fechamento>f.fe?' (adiada)':' (antecipada)'}`);
+    if(f&&o&&OPEN.has(o.status)&&f.cat!==catDe(o)&&f.cat)tx.push(`${f.cat} → ${catDe(o)}`);
+    if(k==='aumento'||k==='reducao')tx.push(`valor ${M(p)} → ${M(c)}`);
+    if(tx.length)itens.push({n,o,f,k,d:c-p,tx:tx.join(' · ')});});
+  itens.sort((a,b)=>Math.abs(b.d)-Math.abs(a.d)||String(a.n).localeCompare(String(b.n)));
+  return {ini:sum([...prev.values()],x=>x),fim:sum([...cur.values()],x=>x),B,itens};}
+// ---- linhas de forecast por visão ----
+const PER_L=P=>P==='ano'?S.ano:QC[+P]+' de '+S.ano;
+function linhasFc(P,D){
+  const kf=DIMS[D].fg,R={},row=k=>R[k]=R[k]||{k,meta:0,real:0,Commit:0,'Best case':0,Pipeline:0,aberto:0,pond:0,n:0,nc:0,riscos:0,vRisco:0,opps:[]};
+  const fm=P==='ano'?1:.25;
+  gerSel().filter(g=>!HIDE_GER.has(g)).forEach(g=>{const m=S.metas[g]||0;if(m)row(kf(g)).meta+=m*fm;});
+  selFat().forEach(r=>{if(inPer(r.mes+'-01',P))row(kf(r.gerente)).real+=r.valor;});
+  selOpps().forEach(o=>{if(!OPEN.has(o.status)||!inPer(o.fechamento,P))return;const x=row(kf(o.gerente)),v=vAno(o),c=catDe(o);
+    x[c]+=v;x.aberto+=v;x.pond+=v*(Number(o.probabilidade)||0)/100;x.n++;if(c==='Commit')x.nc++;x.opps.push(o);if(riscos(o).length){x.riscos++;x.vRisco+=v;}});
+  return Object.values(R).map(x=>({...x,gap:Math.max(0,x.meta-x.real),prev:x.real+x.Commit,cob:x.meta-x.real>0?x.aberto/(x.meta-x.real):null}))
+    .sort((a,b)=>b.meta-a.meta||b.aberto+b.real-a.aberto-a.real);}
+function totalFc(L){const t={k:'Total',opps:[]};['meta','real','Commit','Best case','Pipeline','aberto','pond','n','nc','riscos','vRisco'].forEach(c=>{t[c]=sum(L,x=>x[c]);});
+  t.gap=Math.max(0,t.meta-t.real);t.prev=t.real+t.Commit;t.cob=t.meta-t.real>0?t.aberto/(t.meta-t.real):null;L.forEach(x=>t.opps.push(...x.opps));return t;}
+function cobInfo(x){const a=param().coberturaAlvo;if(!x.meta)return {c:'',t:'Sem meta',i:'–',v:'—'};if(x.cob===null)return {c:'good',t:'Meta atingida',i:'✓',v:'Meta atingida'};
+  const v=nf(x.cob,1)+'x';return x.cob>=a?{c:'good',t:'Saudável',i:'●',v}:x.cob>=a*2/3?{c:'warn',t:'Atenção',i:'▲',v}:{c:'bad',t:'Crítica',i:'■',v};}
+const fimChip=x=>`<span class="cob" title="Quarter encerrado: realizado sobre a meta do quarter">Encerrado · ${x.meta?pct(x.real,x.meta,0):M(x.real)}</span>`;
+const cobChip=x=>{const i=cobInfo(x);return `<span class="cob ${i.c}" title="Cobertura ${esc(i.t.toLowerCase())}">${i.i} ${esc(i.v)}${i.c&&x.cob!==null?' <small>'+esc(i.t)+'</small>':''}</span>`;};
+// ---- gráficos 2D (ECharts) ----
+const corS=s=>cssVar({Realizado:'--k-real',Commit:'--k-commit','Best case':'--k-best',Pipeline:'--k-pipe'}[s]);
+async function grafico(el,opt,onClick){let ec;try{ec=await carregarEC();}catch(err){el.innerHTML='<p class="note" style="padding:20px">Não foi possível carregar o gráfico.</p>';return null;}
+  if(!el.isConnected||el.offsetParent===null)return null;
+  const inst=ec.getInstanceByDom(el)||ec.init(el);inst.setOption(opt,true);inst.off('click');if(onClick)inst.on('click',onClick);return inst;}
+function ecTema(){const fg=cssVar('--fg'),mu=cssVar('--muted'),ln=cssVar('--line'),sf=cssVar('--surface');
+  return {fg,mu,ln,sf,textStyle:{fontFamily:cssVar('--font'),color:fg},
+    tooltip:{backgroundColor:sf,borderColor:ln,textStyle:{color:fg,fontSize:12},confine:true,extraCssText:'box-shadow:0 6px 24px rgba(0,0,0,.12);border-radius:10px'},
+    legend:{top:0,left:0,itemWidth:12,itemHeight:12,icon:'roundRect',textStyle:{color:fg,fontSize:12}},
+    vAxis:{type:'value',axisLabel:{color:mu,formatter:v=>Ms(v)},splitLine:{lineStyle:{color:ln}},axisLine:{show:false}},
+    cAxis:{axisLabel:{color:fg,fontSize:12},axisLine:{lineStyle:{color:ln}},axisTick:{show:false}}};}
+const linhaTip=(c,l,v)=>`<div style="display:flex;gap:10px;justify-content:space-between"><span>${c?`<i style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${c};margin-right:6px"></i>`:''}${esc(l)}</span><b>${esc(v)}</b></div>`;
+function tipFc(x,titulo){return `<b>${esc(titulo||x.k)}</b><div style="min-width:220px;margin-top:4px">${
+  [['Meta',x.meta,cssVar('--meta')],...SERIES.map(s=>[s,s==='Realizado'?x.real:x[s],corS(s)])].map(([l,v,c])=>linhaTip(c,l,M(v))).join('')}
+  ${linhaTip('','Realizado + Commit',M(x.prev)+(x.meta?' · '+pct(x.prev,x.meta,0):''))}${linhaTip('','Cobertura',cobInfo(x).v)}</div>`;}
+function grFcMeta(el,L,onClick,pctM){const T=ecTema(),R=[...L].filter(x=>x.meta||x.aberto).reverse(),fv=(x,v)=>pctM?(x.meta?v/x.meta*100:0):v;
+  el.style.height=Math.max(220,70+R.length*36)+'px';
+  return grafico(el,{textStyle:T.textStyle,legend:{...T.legend,data:[...SERIES,'Meta']},grid:{left:8,right:24,top:36,bottom:8,containLabel:true},
+    tooltip:{...T.tooltip,trigger:'axis',axisPointer:{type:'shadow'},formatter:ps=>tipFc(R[ps[0].dataIndex])},
+    xAxis:pctM?{...T.vAxis,axisLabel:{color:T.mu,formatter:v=>v+'%'}}:T.vAxis,yAxis:{type:'category',data:R.map(x=>x.k),...T.cAxis,axisLabel:{color:T.fg,fontSize:12,width:150,overflow:'truncate'}},
+    series:[...SERIES.map((s,i)=>({name:s,type:'bar',stack:'t',barWidth:18,data:R.map(x=>fv(x,s==='Realizado'?x.real:x[s])),
+      itemStyle:{color:corS(s),borderColor:T.sf,borderWidth:1,borderRadius:i===3?[0,4,4,0]:0},emphasis:{focus:'series'}})),
+      {name:'Meta',type:'scatter',symbol:'rect',symbolSize:[3,28],z:5,data:R.map(x=>x.meta?(pctM?100:x.meta):null),itemStyle:{color:cssVar('--meta')}}]},
+    p=>onClick&&onClick(R[p.dataIndex]));}
+function grFcQuarter(el,Q,onClick){const T=ecTema();
+  return grafico(el,{textStyle:T.textStyle,legend:{...T.legend,data:[...SERIES,'Meta']},grid:{left:8,right:12,top:36,bottom:8,containLabel:true},
+    tooltip:{...T.tooltip,trigger:'axis',axisPointer:{type:'shadow'},formatter:ps=>tipFc(Q[ps[0].dataIndex],QC[ps[0].dataIndex]+' de '+S.ano)},
+    xAxis:{type:'category',data:QC,...T.cAxis},yAxis:T.vAxis,
+    series:[...SERIES.map((s,i)=>({name:s,type:'bar',stack:'t',barWidth:'46%',data:Q.map(x=>s==='Realizado'?x.real:x[s]),
+      itemStyle:{color:corS(s),borderColor:T.sf,borderWidth:1,borderRadius:i===3?[4,4,0,0]:0},emphasis:{focus:'series'}})),
+      {name:'Meta',type:'scatter',symbol:'rect',symbolSize:[54,3],z:5,data:Q.map(x=>x.meta||null),itemStyle:{color:cssVar('--meta')}}]},
+    p=>onClick&&onClick(p.dataIndex));}
+// ---- tela Relatórios ----
+function setSeg(sel,v){document.querySelectorAll(sel+' button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v===v)));}
 function renderRelatorios(){
-  const m=S.rel.med,modo=S.rel.modo,L=fcAno();
-  $('#rAno').innerHTML=opts(['2026','2027'],S.ano);$('#rMed').value=m;
-  document.querySelectorAll('#rModo button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.m===modo)));
+  const P=S.rel.per,D=S.rel.dim,dt=DIMS[D];
+  $('#rAno').innerHTML=opts(['2026','2027'],S.ano);setSeg('#rPer',P);setSeg('#rDim',D);$('#rBase').value=S.rel.base;
+  $('#rDim').hidden=!!GER_FIXO;
   const gsv=filtrando()?gerSel():[];
   $('#rVisao').innerHTML=GER_FIXO?`Sua carteira: <b>${esc(GER_FIXO)}</b>.`:!filtrando()?'Todos os gerentes que você enxerga. Para filtrar, escolha áreas ou gerentes no <a href="#painel">Painel</a>.':`Seleção do Painel: ${S.areas.size?`áreas <b>${esc([...S.areas].join(', '))}</b>, `:''}<b>${gsv.length}</b> gerente${gsv.length===1?'':'s'}.`;
-  const tot=sum(L,vAno),pond=medida(L,'p'),meta=metaSel();
-  $('#rKpis').innerHTML=[['Forecast no ano',M(tot),`${nf(L.length)} oportunidades em aberto com fechamento em ${S.ano}`],['Forecast ponderado',M(pond),'Valor no ano × probabilidade'],
-    ['Ticket médio',M(L.length?tot/L.length:0),'Por oportunidade em forecast'],['Cobertura da meta',meta?pct(tot,meta):'—',meta?`Forecast sobre a meta de ${M(meta)}`:'Seleção sem meta']]
-    .map(([l,v,s])=>`<div class="kpi"><span class="l">${l}</span><span class="v">${v}</span><span class="s">${s}</span></div>`).join('');
-  [['ger','#rGer'],['dir','#rDir'],['area','#rArea']].forEach(([d,el])=>{$(el).innerHTML=tabelaRel(d,L,m,modo);});
+  const L=linhasFc(P,D),T=totalFc(L),pm=x=>x.meta?Math.min(100,x/T.meta*100):0,ci=cobInfo(T);
+  $('#rKpis').innerHTML=[
+    ['Meta '+PER_L(P),T.meta?M(T.meta):'—',P==='ano'?'Soma das metas dos gerentes':'¼ da meta anual',100,''],
+    ['Realizado',M(T.real),T.meta?pct(T.real,T.meta)+' da meta (notas emitidas)':'Notas emitidas',pm(T.real),''],
+    ['Commit',M(T.Commit),`${nf(T.nc)} oportunidade${T.nc===1?'':'s'} que o gerente garante`,pm(T.Commit),''],
+    ['Realizado + Commit',M(T.prev),T.meta?`${pct(T.prev,T.meta)} da meta · falta ${M(Math.max(0,T.meta-T.prev))}`:'',pm(T.prev),T.meta&&T.prev<T.meta?'bad':''],
+    ['Best case',M(T['Best case']),`Potencial: ${M(T.prev+T['Best case'])}${T.meta?' ('+pct(T.prev+T['Best case'],T.meta,0)+' da meta)':''}`,pm(T['Best case']),''],
+    ['Pipeline aberto',M(T.aberto),`${nf(T.n)} oportunidades · ponderado ${M(T.pond)}`,pm(T.aberto),''],
+    ['Cobertura',ci.v,T.meta?(T.cob===null?'O realizado já cobre a meta':`Pipeline ÷ o que falta (${M(T.gap)}). Alvo ${nf(param().coberturaAlvo,1)}x · ${ci.t}`):'Seleção sem meta',T.cob===null?100:Math.min(100,(T.cob||0)/param().coberturaAlvo*100),ci.c],
+    ['Em risco',nf(T.riscos),`${M(T.vRisco)} do pipeline com algum selo de risco`,T.aberto?T.vRisco/T.aberto*100:0,T.riscos?'warn':'']]
+    .map(([l,v,s,w,c])=>`<div class="kpi kpi-${c}" style="--w:${Math.max(0,w||0).toFixed(1)}%"><span class="l">${esc(l)}</span><span class="v">${esc(v)}</span><span class="s">${esc(s)}</span></div>`).join('');
+  $('#rMetaTit').textContent=`Previsão x meta por ${dt.t} · ${PER_L(P)}`;
+  setSeg('#rEsc',S.rel.esc);grFcMeta($('#rChMeta'),L,x=>{S.rel.det={k:x.k};renderRelDet();rolarDet();},S.rel.esc==='pct');
+  // por quarter (sempre o ano inteiro)
+  const Q=[0,1,2,3].map(q=>totalFc(linhasFc(String(q),D)));
+  $('#rQSub').textContent=`Seleção inteira em ${S.ano}. Meta do quarter = ¼ da meta anual. Clique num quarter para filtrar a tela.`;
+  grFcQuarter($('#rChQ'),Q,i=>{S.rel.per=String(i);S.rel.det=null;renderRelatorios();});
+  grEtapas($('#rChEt'),P);
+  // tabela principal
+  $('#rTabTit').textContent=`Cobertura e previsão por ${dt.t} · ${PER_L(P)}`;
+  $('#rTabSub').textContent=`Cobertura = pipeline aberto ÷ o que falta da meta. Verde a partir de ${nf(param().coberturaAlvo,1)}x, amarelo a partir de ${nf(param().coberturaAlvo*2/3,1)}x. Clique numa linha para ver as oportunidades.`;
+  const lin=(x,tot)=>`<tr ${tot?'':`class="click" data-rel="${esc(x.k)}"`}><td class="w"><b>${esc(x.k)}</b></td><td class="r">${x.meta?esc(M(x.meta)):'—'}</td><td class="r">${esc(M(x.real))}</td>
+    <td><span class="relbar"><i style="width:${x.meta?Math.min(100,x.real/x.meta*100):0}%"></i></span> <span class="note">${x.meta?pct(x.real,x.meta,0):''}</span></td>
+    <td class="r">${esc(M(x.Commit))}</td><td class="r"><b>${esc(M(x.prev))}</b>${x.meta?` <span class="note">${pct(x.prev,x.meta,0)}</span>`:''}</td><td class="r">${esc(M(x['Best case']))}</td><td class="r">${esc(M(x.Pipeline))}</td>
+    <td class="r">${esc(M(x.aberto))}</td><td class="r">${esc(M(x.pond))}</td><td class="r">${x.meta?esc(M(x.gap)):'—'}</td><td>${cobChip(x)}</td><td class="r">${x.riscos?`<span class="selo s-venc">${nf(x.riscos)}</span>`:'—'}</td></tr>`;
+  $('#rTab').innerHTML=`<thead><tr><th>${dt.T}</th><th class="r">Meta</th><th class="r">Realizado</th><th style="min-width:120px">% da meta</th><th class="r">Commit</th><th class="r">Realizado + Commit</th><th class="r">Best case</th><th class="r">Pipeline</th><th class="r">Pipeline aberto</th><th class="r">Ponderado</th><th class="r">Falta p/ meta</th><th>Cobertura</th><th class="r">Em risco</th></tr></thead>
+    <tbody>${L.map(x=>lin(x)).join('')||'<tr><td colspan="13" class="note">Nada para a seleção.</td></tr>'}</tbody><tfoot>${lin(T,true)}</tfoot>`;
+  // cobertura por quarter
+  $('#rCobQTit').textContent=`Cobertura por ${dt.t} e quarter · ${S.ano}`;
+  const LQ=[0,1,2,3].map(q=>Object.fromEntries(linhasFc(String(q),D).map(x=>[x.k,x])));
+  const qFim=q=>`${S.ano}-${String(q*3+3).padStart(2,'0')}-31`<TODAY_ISO&&TODAY_ISO.slice(0,4)>=S.ano&&!(TODAY_ISO.slice(0,4)===S.ano&&quarter(TODAY_ISO)===q);
+  const ksQ=uniq(LQ.flatMap(m=>Object.entries(m).filter(([k,x])=>x.meta||x.aberto).map(([k])=>k))).sort((a,b)=>sum(LQ,m=>(m[b]||{}).meta||0)-sum(LQ,m=>(m[a]||{}).meta||0));
+  $('#rCobQ').innerHTML=ksQ.length?`<div class="scroll"><table class="rel"><thead><tr><th>${dt.T}</th>${QC.map(q=>`<th>${q}</th>`).join('')}</tr></thead><tbody>${
+    ksQ.map(k=>`<tr><td class="w"><b>${esc(k)}</b></td>${LQ.map((m,q)=>{const x=m[k];return `<td class="click" data-relq="${esc(k)}|${q}" title="${x?esc(`Meta ${M(x.meta)} · realizado ${M(x.real)} · pipeline ${M(x.aberto)}`):''}">${!x?'—':qFim(q)?fimChip(x):cobChip(x)}</td>`;}).join('')}</tr>`).join('')}</tbody>
+    <tfoot><tr><td>Total</td>${Q.map((x,q)=>`<td>${qFim(q)?fimChip(x):cobChip(x)}</td>`).join('')}</tr></tfoot></table></div>`:'<p class="note">Nada para a seleção.</p>';
+  renderCascata(P);
+  // oportunidades em risco
+  const rk=T.opps.filter(o=>riscos(o).length).sort((a,b)=>vAno(b)-vAno(a));
+  $('#rRiscoTit').textContent=`Oportunidades em risco · ${PER_L(P)}`;
+  $('#rRiscoSub').textContent=rk.length?`${nf(rk.length)} de ${nf(T.n)} oportunidades abertas (${M(sum(rk,vAno))}). Passe o mouse no selo para ver o motivo.`:'Nenhuma oportunidade aberta com selo de risco no período.';
+  $('#rRisco').innerHTML=rk.length?`<thead><tr><th>Nº</th><th>Gerente</th><th>Cliente</th><th>Oportunidade</th><th>Fechamento</th><th>Categoria</th><th class="r">Valor no ano</th><th>Riscos</th></tr></thead><tbody>${
+    rk.slice(0,60).map(o=>`<tr class="click" data-opp="${esc(o.id)}"><td>${esc(o.numero)}</td><td>${esc(o.gerente)}</td><td class="w">${esc(o.cliente)}</td><td class="w">${esc(o.titulo)}</td><td>${esc(fmtD(o.fechamento))}</td><td>${catTag(o)}</td><td class="r">${esc(M(vAno(o)))}</td><td class="selos">${selos(o)}</td></tr>`).join('')}</tbody>`:'';
   renderRelDet();
 }
-function tabelaRel(d,L,m,modo){
-  const g=agrupar(L,DIMS[d].f),ks=Object.keys(g).sort((a,b)=>medida(g[b],m)-medida(g[a],m));
-  if(!ks.length)return '<p class="note">Nenhuma oportunidade em forecast para a seleção.</p>';
-  const tot=medida(L,m);
-  if(modo==='ano'){const mx=Math.max(...ks.map(k=>medida(g[k],m)));
-    return `<div class="scroll"><table class="rel"><thead><tr><th>${esc(DIMS[d].t[0].toUpperCase()+DIMS[d].t.slice(1))}</th><th class="r">Qtd</th><th class="r">Valor no ano</th><th class="r">Ponderado</th><th style="min-width:180px">Participação</th></tr></thead><tbody>${
-      ks.map(k=>{const v=medida(g[k],m);return `<tr class="click" data-rel="${d}|${esc(k)}|"><td class="w"><b>${esc(k)}</b></td><td class="r">${nf(g[k].length)}</td><td class="r">${esc(M(sum(g[k],vAno)))}</td><td class="r">${esc(M(medida(g[k],'p')))}</td>
-        <td><span class="relbar"><i style="width:${Math.max(2,v/mx*100)}%"></i></span> <span class="note">${pct(v,tot)}</span></td></tr>`;}).join('')}
-      </tbody><tfoot><tr><td>Total</td><td class="r">${nf(L.length)}</td><td class="r">${esc(M(sum(L,vAno)))}</td><td class="r">${esc(M(medida(L,'p')))}</td><td></td></tr></tfoot></table></div>`;}
-  const cel=(a)=>medida(a,m), qof=o=>quarter(o.fechamento);
-  const mx=Math.max(1,...ks.flatMap(k=>[0,1,2,3].map(q=>cel(g[k].filter(o=>qof(o)===q)))));
-  return `<div class="scroll"><table class="rel"><thead><tr><th>${esc(DIMS[d].t[0].toUpperCase()+DIMS[d].t.slice(1))}</th>${QL.map(q=>`<th class="r">${q}</th>`).join('')}<th class="r">Total ${esc(S.ano)}</th></tr></thead><tbody>${
-    ks.map(k=>`<tr><td class="w"><b>${esc(k)}</b></td>${[0,1,2,3].map(q=>{const a=g[k].filter(o=>qof(o)===q),v=cel(a);
-      return `<td class="r heat click" data-rel="${d}|${esc(k)}|${q}" style="--h:${Math.round(v/mx*100)}%" title="${esc(k)} · ${QL[q]} · ${nf(a.length)} oportunidades">${a.length?esc(fmtMed(v,m)):'—'}</td>`;}).join('')}
-      <td class="r click" data-rel="${d}|${esc(k)}|"><b>${esc(fmtMed(cel(g[k]),m))}</b></td></tr>`).join('')}</tbody>
-    <tfoot><tr><td>Total</td>${[0,1,2,3].map(q=>`<td class="r">${esc(fmtMed(cel(L.filter(o=>qof(o)===q)),m))}</td>`).join('')}<td class="r">${esc(fmtMed(cel(L),m))}</td></tr></tfoot></table></div>`;
-}
+function grEtapas(el,P){const T=ecTema(),a=selOpps().filter(o=>OPEN.has(o.status)&&inPer(o.fechamento,P));
+  const et=STATUS.filter(s=>s.open&&(s.ativa!==false||a.some(o=>o.status===s.k))).map(s=>({k:s.k,p:s.p,a:a.filter(o=>o.status===s.k)}));
+  return grafico(el,{textStyle:T.textStyle,legend:{...T.legend,data:['Valor no ano','Ponderado']},grid:{left:8,right:12,top:36,bottom:8,containLabel:true},
+    tooltip:{...T.tooltip,trigger:'axis',axisPointer:{type:'shadow'},formatter:ps=>{const e=et[ps[0].dataIndex];return `<b>${esc(e.k)}</b> · ${e.p}%<div style="min-width:200px;margin-top:4px">${linhaTip(corS('Best case'),'Valor no ano',M(medida(e.a,'v')))}${linhaTip(corS('Commit'),'Ponderado',M(medida(e.a,'p')))}${linhaTip('','Oportunidades',nf(e.a.length))}</div>`;}},
+    xAxis:{type:'category',data:et.map(e=>e.k),...T.cAxis,axisLabel:{color:T.fg,fontSize:11,interval:0,formatter:(v,i)=>`${v}\n${et[i].p}% · ${et[i].a.length}`}},yAxis:T.vAxis,
+    series:[{name:'Valor no ano',type:'bar',barGap:'8%',barWidth:'30%',data:et.map(e=>medida(e.a,'v')),itemStyle:{color:corS('Best case'),borderRadius:[4,4,0,0]}},
+      {name:'Ponderado',type:'bar',barWidth:'30%',data:et.map(e=>medida(e.a,'p')),itemStyle:{color:corS('Commit'),borderRadius:[4,4,0,0]}}]});}
+function renderCascata(P){
+  const base=S.rel.base,foto=fotoBase(base),box=$('#rCas');
+  if(!foto){const f=S.fotos.map(x=>x.data).sort();
+    $('#rCasSub').textContent='Compara o pipeline aberto do período com uma foto tirada toda segunda-feira.';
+    box.innerHTML=`<div class="vazio"><b>Ainda não há foto para essa comparação.</b><br>${f.length?`A primeira foto do pipeline foi tirada em ${esc(fmtD(f[0]))}. A comparação com ${esc(BASES[base].l)} aparece a partir de ${esc(fmtD(new Date(new Date(f[0]).getTime()+(BASES[base].d+1)*864e5).toISOString().slice(0,10)))}.`:'A foto semanal começa a ser tirada assim que as oportunidades carregarem.'}</div>`;return;}
+  const m=mudancas(foto,P,g=>inSel(g));
+  $('#rCasSub').textContent=`Pipeline aberto de ${PER_L(P)}: foto de ${fmtD(foto.data)} contra hoje. Valores no ano.`;
+  box.innerHTML='<div id="rChCas" class="ec" style="height:340px"></div><div id="rCasLista"></div>';
+  const T=ecTema(),cats=['Foto '+fmtD(foto.data).slice(0,5),...PASSOS.map(p=>p[1]),'Hoje'];let acc=m.ini;const baseV=[0],val=[m.ini],cor=[corS('Realizado')];
+  PASSOS.forEach(([k])=>{const v=m.B[k];if(v>=0){baseV.push(acc);val.push(v);acc+=v;cor.push(cssVar('--c1'));}else{acc+=v;baseV.push(acc);val.push(-v);cor.push(cssVar('--c3'));}});
+  baseV.push(0);val.push(m.fim);cor.push(corS('Realizado'));
+  grafico($('#rChCas'),{textStyle:T.textStyle,grid:{left:8,right:12,top:24,bottom:8,containLabel:true},
+    tooltip:{...T.tooltip,trigger:'axis',axisPointer:{type:'shadow'},formatter:ps=>{const i=ps[0].dataIndex,sg=i===0||i===cats.length-1?'':PASSOS[i-1][2]*0+(m.B[PASSOS[i-1][0]]>=0?'+':'−');return `<b>${esc(cats[i])}</b><br>${sg}${esc(M(val[i]))}`;}},
+    xAxis:{type:'category',data:cats,...T.cAxis,axisLabel:{color:T.fg,fontSize:11,interval:0,width:90,overflow:'break'}},yAxis:T.vAxis,
+    series:[{type:'bar',stack:'w',data:baseV,itemStyle:{color:'transparent'},emphasis:{disabled:true},tooltip:{show:false}},
+      {type:'bar',stack:'w',barWidth:'56%',data:val.map((v,i)=>({value:v,itemStyle:{color:cor[i],borderRadius:4}})),
+        label:{show:true,position:'top',color:T.fg,fontSize:11,fontWeight:700,formatter:p=>{const i=p.dataIndex;if(!p.value)return '';return (i===0||i===cats.length-1?'':m.B[PASSOS[i-1][0]]>=0?'+':'−')+Ms(p.value);}}}]});
+  $('#rCasLista').innerHTML=m.itens.length?`<h3 style="margin-top:6px">Principais mudanças</h3><div class="scroll"><table><thead><tr><th>Nº</th><th>Gerente</th><th>Cliente</th><th>O que mudou</th><th class="r">Efeito no período</th></tr></thead><tbody>${
+    m.itens.slice(0,12).map(i=>`<tr ${i.o?`class="click" data-opp="${esc(i.o.id)}"`:''}><td>${esc(i.n)}</td><td>${esc(i.o?i.o.gerente:i.f.g)}</td><td class="w">${esc(i.o?i.o.cliente:'')}</td><td class="w">${esc(i.tx)}</td><td class="r ${i.d<0?'neg':i.d>0?'pos':''}">${i.d?(i.d>0?'+':'−')+esc(M(Math.abs(i.d))):'—'}</td></tr>`).join('')}</tbody></table></div>`:'<p class="note">Nenhuma mudança desde a foto.</p>';}
+function rolarDet(){$('#rDetCard').scrollIntoView({behavior:'smooth',block:'start'});}
 function renderRelDet(){
   const det=S.rel.det,card=$('#rDetCard'); if(!det){card.hidden=true;return;} card.hidden=false;
-  const a=fcAno().filter(o=>DIMS[det.d].f(o)===det.k&&(det.q===''||quarter(o.fechamento)===+det.q)).sort((x,y)=>vAno(y)-vAno(x));
-  $('#rDetTit').textContent=`${det.k}${det.q!==''?' · '+QL[+det.q]:''}: ${nf(a.length)} oportunidade${a.length===1?'':'s'} · ${M(sum(a,vAno))}`;
-  $('#rDet').innerHTML=`<thead><tr><th>Nº</th><th>Fechamento</th><th>Gerente</th><th>Cliente</th><th>Oportunidade</th><th>Etapa</th><th class="r">Valor no ano</th><th class="r">Prob.</th></tr></thead><tbody>${
-    a.map(o=>`<tr class="click" data-opp="${esc(o.id)}"><td>${esc(o.numero)}</td><td>${esc(fmtD(o.fechamento))}</td><td>${esc(o.gerente)}</td><td class="w">${esc(o.cliente)}</td><td class="w">${esc(o.titulo)}</td><td>${tagSt(o.status)}</td><td class="r">${esc(M(vAno(o)))}</td><td class="r">${esc(o.probabilidade)}%</td></tr>`).join('')}</tbody>`;
+  const P=det.q!==undefined?String(det.q):S.rel.per,kf=DIMS[S.rel.dim].fg;
+  const a=selOpps().filter(o=>OPEN.has(o.status)&&inPer(o.fechamento,P)&&kf(o.gerente)===det.k).sort((x,y)=>vAno(y)-vAno(x));
+  $('#rDetTit').textContent=`${det.k} · ${PER_L(P)}: ${nf(a.length)} oportunidade${a.length===1?'':'s'} abertas · ${M(sum(a,vAno))}`;
+  $('#rDet').innerHTML=`<thead><tr><th>Nº</th><th>Fechamento</th><th>Gerente</th><th>Cliente</th><th>Oportunidade</th><th>Etapa</th><th>Categoria</th><th class="r">Valor no ano</th><th class="r">Prob.</th><th>Riscos</th></tr></thead><tbody>${
+    a.map(o=>`<tr class="click" data-opp="${esc(o.id)}"><td>${esc(o.numero)}</td><td>${esc(fmtD(o.fechamento))}</td><td>${esc(o.gerente)}</td><td class="w">${esc(o.cliente)}</td><td class="w">${esc(o.titulo)}</td><td>${tagSt(o.status)}</td><td>${catTag(o)}</td><td class="r">${esc(M(vAno(o)))}</td><td class="r">${esc(o.probabilidade)}%</td><td class="selos">${selos(o)}</td></tr>`).join('')||'<tr><td colspan="10" class="note">Nenhuma oportunidade aberta.</td></tr>'}</tbody>`;
 }
-$('#v-relatorios').addEventListener('click',e=>{const r=e.target.closest('[data-rel]');if(!r)return;const [d,k,q]=r.dataset.rel.split('|');S.rel.det={d,k,q};renderRelDet();$('#rDetCard').scrollIntoView({behavior:'smooth',block:'start'});});
+// ---- exportação (CSV com ; e vírgula decimal, abre direto no Excel) ----
+const nCsv=v=>(Math.round((Number(v)||0)*100)/100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2,useGrouping:false});
+function csv(linhas){return '﻿'+linhas.map(r=>r.map(c=>{const s=String(c??'');return /[;"\n\r]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}).join(';')).join('\r\n');}
+function exportarTabela(){const P=S.rel.per,D=S.rel.dim,L=linhasFc(P,D),T=totalFc(L);
+  const cab=[DIMS[D].T,'Meta','Realizado','% da meta','Commit','Realizado + Commit','Best case','Pipeline','Pipeline aberto','Ponderado','Falta para a meta','Cobertura (x)','Situação','Oportunidades abertas','Em risco'];
+  const l=x=>[x.k,nCsv(x.meta),nCsv(x.real),x.meta?nCsv(x.real/x.meta*100):'',nCsv(x.Commit),nCsv(x.prev),nCsv(x['Best case']),nCsv(x.Pipeline),nCsv(x.aberto),nCsv(x.pond),nCsv(x.gap),x.cob===null||!x.meta?'':nCsv(x.cob),cobInfo(x).t,x.n,x.riscos];
+  baixar(`forecast-por-${slug(DIMS[D].t)}-${slug(PER_L(P))}.csv`,csv([cab,...L.map(l),l(T)]));}
+function exportarOpps(){const P=S.rel.per,a=selOpps().filter(o=>OPEN.has(o.status)&&inPer(o.fechamento,P)).sort((x,y)=>(x.fechamento||'').localeCompare(y.fechamento||''));
+  const cab=['Nº','Gerente','Diretor','Área','Cliente','Oportunidade','Etapa','Probabilidade (%)','Categoria','Categoria sugerida?','Fechamento','Quarter','Valor no ano','Ponderado','Próximo passo','Data do próximo passo','Adiamentos','Riscos'];
+  baixar(`oportunidades-forecast-${slug(PER_L(P))}.csv`,csv([cab,...a.map(o=>[o.numero,o.gerente,diretorDe(o.gerente),areaDe(o.gerente),o.cliente,o.titulo,o.status,o.probabilidade,catDe(o),CATS.includes(o.categoria)?'Não':'Sim',fmtD(o.fechamento),o.fechamento?QC[quarter(o.fechamento)]:'',
+    nCsv(vAno(o)),nCsv(vAno(o)*(Number(o.probabilidade)||0)/100),o.proximoPasso||'',fmtD(o.proximoPassoData||''),Number(o.adiamentos)||0,riscos(o).map(r=>r.l).join(' | ')])]));}
+$('#v-relatorios').addEventListener('click',e=>{const r=e.target.closest('[data-rel],[data-relq]');if(!r)return;
+  if(r.dataset.rel!==undefined)S.rel.det={k:r.dataset.rel};else{const [k,q]=r.dataset.relq.split('|');S.rel.det={k,q:+q};}renderRelDet();rolarDet();});
 $('#rDetFechar').addEventListener('click',()=>{S.rel.det=null;renderRelDet();});
-$('#rModo').addEventListener('click',e=>{const b=e.target.closest('[data-m]');if(!b)return;S.rel.modo=b.dataset.m;renderRelatorios();});
-$('#rMed').addEventListener('change',e=>{S.rel.med=e.target.value;renderRelatorios();});
+$('#rPer').addEventListener('click',e=>{const b=e.target.closest('[data-v]');if(!b)return;S.rel.per=b.dataset.v;S.rel.det=null;renderRelatorios();});
+$('#rDim').addEventListener('click',e=>{const b=e.target.closest('[data-v]');if(!b)return;S.rel.dim=b.dataset.v;S.rel.det=null;renderRelatorios();});
+$('#rEsc').addEventListener('click',e=>{const b=e.target.closest('[data-v]');if(!b)return;S.rel.esc=b.dataset.v;renderRelatorios();});
+$('#rBase').addEventListener('change',e=>{S.rel.base=e.target.value;renderCascata(S.rel.per);});
+$('#rExpTab').addEventListener('click',exportarTabela);$('#rExpOpp').addEventListener('click',exportarOpps);
 $('#rAno').addEventListener('change',e=>{S.ano=e.target.value;$('#fAno').value=S.ano;S.rel.det=null;renderAll();});
+let rTE;window.addEventListener('resize',()=>{clearTimeout(rTE);rTE=setTimeout(()=>{if(!ecP2)return;ecP2.then(ec=>document.querySelectorAll('.ec').forEach(el=>{const i=ec.getInstanceByDom(el);i&&i.resize();})).catch(()=>{});},200);});
+// ---- Configurações > Forecast e riscos ----
+function renderParamCfg(){const p=param(),ro=!ADMIN;
+  $('#parGrid').innerHTML=PARAM_DEF.map(d=>`<label class="field"><span>${esc(d.l)}</span><input type="number" min="0" step="${d.step}" id="par_${d.k}" value="${esc(p[d.k])}" ${ro?'disabled':''}><span class="note">${esc(d.s)}</span></label>`).join('');
+  $('#par_save').disabled=ro;$('#par_reset').disabled=ro;}
+$('#parF').addEventListener('submit',async e=>{e.preventDefault();if(!ADMIN)return;const v={};
+  for(const d of PARAM_DEF){const x=Number($('#par_'+d.k).value);if(!isFinite(x)||x<0){$('#par_err').textContent=`Valor inválido em "${d.l}".`;return;}v[d.k]=x;}
+  if(v.bestProb>v.commitProb){$('#par_err').textContent='A probabilidade de Best case não pode ser maior que a de Commit.';return;}
+  try{await salvarParam(v);$('#par_err').textContent='';toast('Limites salvos');}catch(err){$('#par_err').textContent='Não foi possível salvar: '+(err&&err.message||'tente de novo.');}});
+$('#par_reset').addEventListener('click',()=>{PARAM_DEF.forEach(d=>{$('#par_'+d.k).value=PARAM_PADRAO[d.k];});});
 
 /* ================= reunião de forecast ================= */
 const cssVar=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -775,25 +974,81 @@ function formAcao(id){const pd=pode('registrar_acoes');const resp=uniq([...geren
     <datalist id="dlResp">${resp.map(r=>`<option value="${esc(r)}">`).join('')}</datalist></form>`:'<p class="note">Seu acesso permite ver, mas não registrar ações.</p>';}
 function renderReuniao(){
   const gs=reuGerentes(),g=reuGer();
-  $('#mGer').innerHTML=opts(gs,g);$('#mGer').disabled=!!GER_FIXO;$('#mAno').innerHTML=opts(['2026','2027'],S.ano);
+  $('#mGer').innerHTML=opts(gs,g);$('#mGer').disabled=!!GER_FIXO;$('#mAno').innerHTML=opts(['2026','2027'],S.ano);setSeg('#mModo',S.reu.modo);
   const fc=fcAno().filter(o=>o.gerente===g).sort((a,b)=>(a.fechamento||'').localeCompare(b.fechamento||''));
-  const real=sum(S.fat.filter(r=>r.gerente===g&&r.mes.startsWith(S.ano)),r=>r.valor),won=sum(S.opps.filter(o=>o.gerente===g&&o.status===WON&&(o.fechamento||'').startsWith(S.ano)),vAno);
-  const f=sum(fc,vAno),meta=S.metas[g]||0,venc=fc.filter(o=>o.fechamento<TODAY_ISO).length,abertas=S.acoes.filter(a=>a.gerente===g&&a.status!=='concluida').length;
+  const x=linhasFc('ano','ger').find(r=>r.k===g)||{k:g,meta:S.metas[g]||0,real:0,Commit:0,'Best case':0,Pipeline:0,aberto:0,pond:0,n:0,nc:0,riscos:0,vRisco:0,gap:S.metas[g]||0,prev:0,cob:null};
+  const abertas=S.acoes.filter(a=>a.gerente===g&&a.status!=='concluida').length,venc=S.acoes.filter(a=>a.gerente===g&&a.status!=='concluida'&&a.prazo&&a.prazo<TODAY_ISO).length,ci=cobInfo(x);
   $('#mTit').textContent=g?`Reunião com ${g}`:'Reunião de forecast';
-  $('#mKpis').innerHTML=[['Meta',meta?M(meta):'—','do período'],['Realizado',M(real),meta?pct(real,meta)+' da meta':'faturado em '+S.ano],['Forecast',M(f),`${nf(fc.length)} oportunidades · ponderado ${M(medida(fc,'p'))}`],
-    ['Gap da meta',meta?M(Math.max(0,meta-real-f)):'—',meta?(real+f>=meta?'Coberta com realizado + forecast':'Falta cobrir com novas oportunidades'):''],['Ações abertas',nf(abertas),venc?`${nf(venc)} oportunidade${venc>1?'s':''} com fechamento vencido`:'Sem fechamento vencido']]
-    .map(([l,v,s])=>`<div class="kpi"><span class="l">${l}</span><span class="v">${v}</span><span class="s">${esc(s)}</span></div>`).join('');
+  $('#mKpis').innerHTML=[['Meta',x.meta?M(x.meta):'—',diretorDe(g)!=='Sem diretor'?'Diretor: '+diretorDe(g):'Sem diretor definido',''],['Realizado',M(x.real),x.meta?pct(x.real,x.meta)+' da meta':'faturado em '+S.ano,''],
+    ['Realizado + Commit',M(x.prev),x.meta?`${pct(x.prev,x.meta)} da meta · Commit ${M(x.Commit)}`:`Commit ${M(x.Commit)}`,x.meta&&x.prev<x.meta?'bad':''],
+    ['Best case',M(x['Best case']),`Pipeline ${M(x.Pipeline)} · ponderado ${M(x.pond)}`,''],
+    ['Cobertura',ci.v,x.meta?(x.cob===null?'O realizado já cobre a meta':`Falta ${M(x.gap)} · ${ci.t}`):'Gerente sem meta',ci.c],
+    ['Ações abertas',nf(abertas),venc?`${nf(venc)} com prazo vencido`:'Nenhuma vencida',venc?'warn':'']]
+    .map(([l,v,s,c])=>`<div class="kpi kpi-${c}"><span class="l">${esc(l)}</span><span class="v">${esc(v)}</span><span class="s">${esc(s)}</span></div>`).join('');
+  renderPauta(g,fc);
   $('#mOppTit').textContent=`Oportunidades em forecast de ${g||'—'} em ${S.ano}`;
-  $('#mOpps').innerHTML=`<thead><tr><th>Nº</th><th>Fechamento</th><th>Cliente</th><th>Oportunidade</th><th>Etapa</th><th class="r">Valor no ano</th><th class="r">Prob.</th><th class="r">Ações</th><th></th></tr></thead><tbody>${
-    fc.map(o=>{const ac=acoesOpp(o.numero),ab=ac.filter(a=>a.status!=='concluida').length;return `<tr><td>${esc(o.numero)}</td><td class="${o.fechamento<TODAY_ISO?'venc':''}">${esc(fmtD(o.fechamento))}</td><td class="w">${esc(o.cliente)}</td><td class="w">${esc(o.titulo)}</td><td>${tagSt(o.status)}</td><td class="r">${esc(M(vAno(o)))}</td><td class="r">${esc(o.probabilidade)}%</td>
-      <td class="r">${ac.length?`${nf(ab)} aberta${ab===1?'':'s'} / ${nf(ac.length)}`:'—'}</td><td><button class="ico" data-acoes-opp="${esc(o.numero)}">Ações</button></td></tr>`;}).join('')||'<tr><td colspan="9" class="note">Nenhuma oportunidade em forecast.</td></tr>'}</tbody>`;
+  $('#mOpps').innerHTML=`<thead><tr><th>Nº</th><th>Fechamento</th><th>Cliente</th><th>Oportunidade</th><th>Etapa</th><th>Categoria</th><th class="r">Valor no ano</th><th class="r">Prob.</th><th>Riscos</th><th class="r">Ações</th><th></th></tr></thead><tbody>${
+    fc.map(o=>{const ac=acoesOpp(o.numero),ab=ac.filter(a=>a.status!=='concluida').length;return `<tr><td>${esc(o.numero)}</td><td class="${o.fechamento<TODAY_ISO?'venc':''}">${esc(fmtD(o.fechamento))}</td><td class="w">${esc(o.cliente)}</td><td class="w">${esc(o.titulo)}</td><td>${tagSt(o.status)}</td><td>${catTag(o)}</td><td class="r">${esc(M(vAno(o)))}</td><td class="r">${esc(o.probabilidade)}%</td><td class="selos">${selos(o)}</td>
+      <td class="r">${ac.length?`${nf(ab)} aberta${ab===1?'':'s'} / ${nf(ac.length)}`:'—'}</td><td><button class="ico" data-acoes-opp="${esc(o.numero)}">Ações</button></td></tr>`;}).join('')||'<tr><td colspan="11" class="note">Nenhuma oportunidade em forecast.</td></tr>'}</tbody>`;
   $('#mAcGer').innerHTML=ordAcoes(acoesGer(g)).map(a=>itemAcao(a)).join('')||'<li class="note">Nenhuma ação registrada para este gerente.</li>';
   $('#mAcGerForm').innerHTML=g?formAcao('ger'):'';
   const nums=new Set(S.opps.filter(o=>o.gerente===g).map(o=>String(o.numero)));
   $('#mAcOpp').innerHTML=ordAcoes(S.acoes.filter(a=>a.tipo==='opp'&&nums.has(String(a.numero)))).map(a=>itemAcao(a,true)).join('')||'<li class="note">Nenhuma ação registrada nas oportunidades deste gerente.</li>';
-  renderGraficos3D(gs,g,fc);
+  const tt=S.reu.modo==='3d'?[['Forecast por gerente e quarter','Arraste para girar, role para aproximar. Clique numa barra para trocar de gerente. Em laranja, o gerente da reunião.'],['Oportunidades do gerente em 3D','Dias até o fechamento × probabilidade × valor no ano. Cor = etapa, tamanho = valor. Clique num ponto para registrar ações.']]
+    :[['Previsão do gerente por quarter','Realizado, Commit, Best case e Pipeline em cada quarter, contra ¼ da meta anual (marca vermelha).'],['Onde estão as oportunidades','Dias até o fechamento × probabilidade. Tamanho = valor no ano, cor = categoria. Clique num ponto para registrar ações.']];
+  $('#mChATit').textContent=tt[0][0];$('#mChASub').textContent=tt[0][1];$('#mChBTit').textContent=tt[1][0];$('#mChBSub').textContent=tt[1][1];
+  document.querySelectorAll('#m3dBar,#m3dOpp').forEach(el=>el.classList.toggle('chart3d',S.reu.modo==='3d'));
+  if(S.reu.modo==='3d')renderGraficos3D(gs,g,fc);else renderGraficos2D(g,fc);
 }
-let ecP=null;
+const qAtual=()=>S.ano===String(TODAY.getFullYear())?quarter(TODAY_ISO):0;
+function pautaDados(g,fc){
+  const qa=qAtual(),top=fc.filter(o=>quarter(o.fechamento)===qa).sort((a,b)=>vAno(b)-vAno(a)).slice(0,5);
+  const rk=fc.filter(o=>riscos(o).length).sort((a,b)=>vAno(b)-vAno(a)).slice(0,5);
+  const foto=fotoBase('semana'),mud=foto?mudancas(foto,'ano',x=>x===g):null;
+  const ac=ordAcoes(S.acoes.filter(a=>a.gerente===g&&a.status!=='concluida')).sort((a,b)=>((b.prazo&&b.prazo<TODAY_ISO)-(a.prazo&&a.prazo<TODAY_ISO))).slice(0,6);
+  return {qa,top,rk,foto,mud,ac};}
+function renderPauta(g,fc){
+  const d=pautaDados(g,fc),li=(o,extra)=>`<li><a href="#" data-acoes-opp="${esc(o.numero)}"><b>Nº ${esc(o.numero)}</b> · ${esc(o.cliente)}</a><span class="note">${extra}</span></li>`;
+  $('#mPautaTit').textContent=g?`Pauta da reunião com ${g}`:'Pauta da reunião';
+  const f=S.fotos.map(x=>x.data).sort()[0];
+  $('#mPauta').innerHTML=[
+    ['1','Top negócios do '+QC[d.qa],d.top.map(o=>li(o,`${esc(M(vAno(o)))} · ${catTag(o)} · fecha ${esc(fmtD(o.fechamento))}`)).join('')||`<li class="note">Nenhuma oportunidade com fechamento no ${QC[d.qa]}.</li>`],
+    ['2','Riscos para discutir',d.rk.map(o=>li(o,`${esc(M(vAno(o)))} · ${selos(o)}`)).join('')||'<li class="note">Nenhuma oportunidade com selo de risco.</li>'],
+    ['3',d.foto?`O que mudou desde ${fmtD(d.foto.data)}`:'O que mudou na semana',d.mud?(d.mud.itens.slice(0,5).map(i=>i.o?li(i.o,esc(i.tx)+(i.d?` · <b class="${i.d<0?'neg':'pos'}">${i.d>0?'+':'−'}${esc(M(Math.abs(i.d)))}</b>`:'')):`<li><b>Nº ${esc(i.n)}</b> <span class="note">${esc(i.tx)}</span></li>`).join('')||'<li class="note">Nada mudou desde a última foto.</li>')
+      :`<li class="note">${f?`A comparação semanal começa em ${esc(fmtD(new Date(new Date(f).getTime()+7*864e5).toISOString().slice(0,10)))}, uma semana depois da primeira foto (${esc(fmtD(f))}).`:'A primeira foto do pipeline ainda não foi tirada.'}</li>`],
+    ['4','Ações pendentes',d.ac.map(a=>{const v=a.prazo&&a.prazo<TODAY_ISO;return `<li><span>${esc(a.texto)}</span><span class="note">${a.responsavel?esc(a.responsavel)+' · ':''}${a.prazo?`<span class="${v?'venc':''}">prazo ${esc(fmtD(a.prazo))}${v?' (vencida)':''}</span>`:'sem prazo'}</span></li>`;}).join('')||'<li class="note">Nenhuma ação aberta.</li>']]
+    .map(([n,t,c])=>`<div class="pauta-bloco"><h4><span class="num">${n}</span>${esc(t)}</h4><ul>${c}</ul></div>`).join('');}
+function textoPauta(){const g=reuGer(),fc=fcAno().filter(o=>o.gerente===g),d=pautaDados(g,fc),L=[];
+  L.push(`Pauta da reunião de forecast com ${g} (${fmtD(TODAY_ISO)})`,'');
+  L.push(`1. Top negócios do ${QC[d.qa]}`);d.top.forEach(o=>L.push(`   - Nº ${o.numero} ${o.cliente}: ${M(vAno(o))}, ${catDe(o)}, fecha ${fmtD(o.fechamento)}`));if(!d.top.length)L.push('   - Nenhum');
+  L.push('','2. Riscos');d.rk.forEach(o=>L.push(`   - Nº ${o.numero} ${o.cliente}: ${M(vAno(o))} (${riscos(o).map(r=>r.l).join(', ')})`));if(!d.rk.length)L.push('   - Nenhum');
+  L.push('',d.foto?`3. O que mudou desde ${fmtD(d.foto.data)}`:'3. O que mudou');(d.mud?d.mud.itens.slice(0,5):[]).forEach(i=>L.push(`   - Nº ${i.n}${i.o?' '+i.o.cliente:''}: ${i.tx}`));if(!d.mud||!d.mud.itens.length)L.push('   - Sem comparação ou sem mudanças');
+  L.push('','4. Ações pendentes');d.ac.forEach(a=>L.push(`   - ${a.texto}${a.responsavel?' ('+a.responsavel+')':''}${a.prazo?', prazo '+fmtD(a.prazo):''}`));if(!d.ac.length)L.push('   - Nenhuma');
+  return L.join('\n');}
+$('#mCopiar').addEventListener('click',async()=>{const t=textoPauta();
+  try{await navigator.clipboard.writeText(t);toast('Pauta copiada');}
+  catch(err){const ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();
+    let ok=false;try{ok=document.execCommand('copy');}catch(e2){}ta.remove();if(ok)toast('Pauta copiada');else baixar('pauta-forecast-'+slug(reuGer())+'.txt',t);}});
+$('#mModo').addEventListener('click',e=>{const b=e.target.closest('[data-v]');if(!b||b.dataset.v===S.reu.modo)return;S.reu.modo=b.dataset.v;try{localStorage.setItem('crm-reu-modo',S.reu.modo);}catch(err){}
+  ['#m3dBar','#m3dOpp'].forEach(s=>{const el=$(s);const pr=ecP2||ecP;if(pr)pr.then(m=>{const i=m.getInstanceByDom(el);i&&i.dispose();}).catch(()=>{});});
+  setTimeout(renderReuniao,0);});
+async function renderGraficos2D(g,fc){
+  const Q=[0,1,2,3].map(q=>linhasFc(String(q),'ger').find(r=>r.k===g)||{k:g,meta:(S.metas[g]||0)/4,real:0,Commit:0,'Best case':0,Pipeline:0,aberto:0,pond:0,gap:(S.metas[g]||0)/4,prev:0,cob:null});
+  await grFcQuarter($('#m3dBar'),Q,null);
+  const T=ecTema(),cats=['Commit','Best case','Pipeline'];
+  const mx=Math.max(1,...fc.map(vAno));
+  grafico($('#m3dOpp'),{textStyle:T.textStyle,legend:{...T.legend,data:cats},grid:{left:16,right:16,top:36,bottom:28,containLabel:true},
+    tooltip:{...T.tooltip,trigger:'item',formatter:p=>{const o=p.data.o;return `<b>Nº ${esc(o.numero)} · ${esc(o.cliente)}</b><br>${esc(o.titulo)}<br>${esc(o.status)} · ${esc(o.probabilidade)}% · ${esc(catDe(o))}<br>${esc(M(vAno(o)))} no ano · fecha ${esc(fmtD(o.fechamento))}${riscos(o).length?'<br>Riscos: '+esc(riscos(o).map(r=>r.l).join(', ')):''}<br><i>Clique para ver as ações</i>`;}},
+    xAxis:{type:'value',name:'Dias até o fechamento',nameLocation:'middle',nameGap:26,nameTextStyle:{color:T.mu},axisLabel:{color:T.mu},splitLine:{lineStyle:{color:T.ln}}},
+    yAxis:{type:'value',name:'Probabilidade %',nameLocation:'middle',nameGap:34,min:0,max:100,nameTextStyle:{color:T.mu},axisLabel:{color:T.mu},splitLine:{lineStyle:{color:T.ln}}},
+    series:cats.map(c=>({name:c,type:'scatter',data:fc.filter(o=>catDe(o)===c).map(o=>({value:[Math.round((new Date(o.fechamento)-TODAY)/864e5),Number(o.probabilidade)||0],o,symbolSize:8+Math.sqrt(vAno(o)/mx)*34})),
+      itemStyle:{color:corS(c),opacity:.88,borderColor:T.sf,borderWidth:2},emphasis:{itemStyle:{color:cssVar('--c3')}},
+      markLine:c==='Commit'?{silent:true,symbol:'none',lineStyle:{color:T.mu,type:'dashed'},label:{color:T.mu,formatter:'hoje',position:'insideEndTop'},data:[{xAxis:0}]}:undefined}))},
+    p=>{if(p.data&&p.data.o)acoesOppForm(p.data.o);});
+}
+let ecP=null,ecP2=null;
+function carregarEC(){return ecP2=ecP2||import('echarts');}
+
 function carregarECharts(){return ecP=ecP||(async()=>{ const ec=await import('echarts');await import('echarts-gl');return ec; })();}
 async function renderGraficos3D(gs,g,fc){
   let ec; try{ec=await carregarECharts();}catch(err){['#m3dBar','#m3dOpp'].forEach(s=>$(s).innerHTML='<p class="note" style="padding:20px">Não foi possível carregar os gráficos 3D.</p>');return;}
@@ -845,6 +1100,10 @@ document.addEventListener('submit',async e=>{const f=e.target.closest('[data-aca
   try{await salvarAcao(a);f.reset();toast('Ação registrada');}catch(err){toast('Não foi possível registrar a ação.');}finally{f.querySelector('button').disabled=false;}});
 function aposAcoes(){if(cur()==='reuniao'){const fe=document.activeElement&&document.activeElement.closest('.acao-f');if(!fe)renderReuniao();}S.reu.drawerLista&&$('#dAcoes')&&S.reu.drawerLista();}
 async function salvarAcao(a){await api.salvarAcao(a,userId);await recarregar('acoes');}
+async function salvarParam(v){await api.salvarParametros(v,userId);await recarregar('parametros');}
+function baixarBlob(nome,txt){const u=URL.createObjectURL(new Blob([txt],{type:nome.endsWith('.csv')?'text/csv;charset=utf-8':'text/plain;charset=utf-8'}));
+  const a=document.createElement('a');a.href=u;a.download=nome;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000);}
+async function baixar(nome,txt){baixarBlob(nome,txt);}
 /* ================= roteamento ================= */
 const cur=()=>{const h=location.hash.slice(1);return VIEWS.includes(h)?h:(VIEWS[0]||null);};
 function renderAll(){
@@ -889,6 +1148,9 @@ function oppForm(o,preCli){
       <label>Gerente<select id="o_gerente" required><option value=""></option>${opts(gerForm(),o.gerente)}</select></label>
       <label>Etapa<select id="o_status">${opts(STATUS.filter(s=>s.ativa!==false||s.k===o.status).map(s=>s.k),o.status)}</select></label>
       <label>Probabilidade (%)<input id="o_prob" type="number" min="0" max="100" step="5" value="${esc(o.probabilidade)}"></label>
+      <label>Categoria de forecast<select id="o_cat"><option value="">Automática (pela probabilidade)</option>${opts(CATS,CATS.includes(o.categoria)?o.categoria:'')}</select><span class="note" id="o_catNota"></span></label>
+      <label>Próximo passo<input id="o_pp" value="${esc(o.proximoPasso||'')}" placeholder="Ex.: reunião técnica com o cliente"></label>
+      <label>Data do próximo passo<input id="o_ppd" type="date" value="${esc(o.proximoPassoData||'')}"></label>
       <label>Área de negócio<select id="o_area">${opts(opcoes('area',o.area),o.area||'','')}</select></label>
       <label>Tipo de revenda<select id="o_rev">${opts(opcoes('revenda',o.revenda),o.revenda||'','')}</select></label>
       <label>Fabricante<select id="o_soft">${opts(opcoes('fabricante',o.software),o.software||'','')}</select></label>
@@ -906,14 +1168,21 @@ function oppForm(o,preCli){
       const tot=()=>{$('#o_total').textContent=`Valor total: ${brl((+$('#o_vs').value||0)+(+$('#o_vsw').value||0))} · Valor no ano (usado no forecast): ${brl((+$('#o_fs').value||0)+(+$('#o_sa').value||0))}`;};
       ['#o_vs','#o_vsw','#o_fs','#o_sa'].forEach(s=>$(s).addEventListener('input',tot));tot();
       $('#o_status').addEventListener('change',e=>{$('#o_prob').value=ST[e.target.value]?.p??$('#o_prob').value;});
+      const catNota=()=>{const st=$('#o_status').value,ab=OPEN.has(st);$('#o_cat').disabled=!ab||ro;
+        $('#o_catNota').textContent=!ab?(st===WON?'Etapa ganha: entra como Fechado.':'Etapa encerrada: sai do forecast.'):$('#o_cat').value?'Definida pelo gerente.':`Sugerida agora: ${catSugerida({probabilidade:+$('#o_prob').value||0})}.`;};
+      ['#o_status','#o_prob','#o_cat'].forEach(s=>{$(s).addEventListener('change',catNota);$(s).addEventListener('input',catNota);});catNota();
       d.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',closeDrawer));
       $('#oppF').addEventListener('submit',async e=>{e.preventDefault();if(ro)return;if(S.readOnly)return;
         const nome=$('#o_cliente').value.trim();const c=S.clientes.find(x=>x.nome.toLowerCase()===nome.toLowerCase());
         const data={...o,titulo:$('#o_titulo').value.trim(),cliente:c?c.nome:nome,clienteId:c?c.id:slug(nome),gerente:$('#o_gerente').value,status:$('#o_status').value,
           probabilidade:Math.max(0,Math.min(100,+$('#o_prob').value||0)),area:$('#o_area').value,revenda:$('#o_rev').value||null,software:$('#o_soft').value||null,parceiro:$('#o_parc').value||null,
           valorServico:+$('#o_vs').value||0,valorSoftware:+$('#o_vsw').value||0,faturamentoServico:+$('#o_fs').value||0,softwareAno:+$('#o_sa').value||0,
-          cadastro:$('#o_cad').value||null,fechamento:$('#o_fech').value||null,observacoes:$('#o_obs').value.trim(),atualizadoEm:new Date().toISOString()};
+          cadastro:$('#o_cad').value||null,fechamento:$('#o_fech').value||null,observacoes:$('#o_obs').value.trim(),atualizadoEm:new Date().toISOString(),
+          categoria:OPEN.has($('#o_status').value)?($('#o_cat').value||null):null,proximoPasso:$('#o_pp').value.trim(),proximoPassoData:$('#o_ppd').value||null};
         data.valorTotal=data.valorServico+data.valorSoftware;
+        // histórico para os selos de risco (no app de produção o banco também calcula, por gatilho)
+        if(isNew||o.status!==data.status)data.etapaDesde=new Date().toISOString();
+        if(!isNew&&o.fechamento&&data.fechamento&&data.fechamento>o.fechamento)data.adiamentos=(Number(o.adiamentos)||0)+1;
         if(isNew){delete data.numero;data.origem='crm';}
         delete data.id;
         try{ if(!c)await api.salvarCliente({id:data.clienteId,nome,gerente:data.gerente,segmento:'',siglasFaturamento:[],origem:'crm'},userId);
@@ -973,6 +1242,8 @@ async function recarregar(qual?:string){
     if(!qual||qual==='gerentes')S.gerCad=await api.gerentes();
     if(!qual||qual==='opcoes')S.listas=await api.listas();
     if(!qual||qual==='papeis')S.papeis=await api.papeis();
+    if(!qual||qual==='parametros')S.param=await api.parametros();
+    if(!qual||qual==='fotos_pipeline')S.fotos=await api.fotos(TODAY_ISO);
     if((!qual||qual==='acoes')&&(pode('ver_reuniao')||pode('registrar_acoes'))){S.acoes=await api.acoes();aposAcoes();}
     if(ADMIN&&(!qual||qual==='usuarios'||qual==='perfis'||qual==='convites'))S.usuarios=await api.usuarios();
     if(!qual||qual==='metas'){S.metasDoc=await api.metasDetalhe(+S.ano);S.metas=S.metasDoc.valores;}
@@ -984,10 +1255,12 @@ mostrarNome();
 renderAll();
 (async()=>{
   try{
-    const [o,c,f,m,r,et,gc,ls,pp]=await Promise.all([api.oportunidades(),api.clientes(),api.faturamento(),api.metasDetalhe(+S.ano),api.running(),api.etapas(),api.gerentes(),api.listas(),api.papeis()]);
-    aplicarEtapas(et);S.opps=o;S.clientes=c;S.fat=f;S.metasDoc=m;S.metas=m.valores;S.running=r;S.gerCad=gc;S.listas=ls;S.papeis=pp;aplicarAcesso();mostrarNome();if(pode('ver_reuniao')||pode('registrar_acoes'))S.acoes=await api.acoes().catch(()=>[]);if(ADMIN)S.usuarios=await api.usuarios().catch(()=>[]);
+    const [o,c,f,m,r,et,gc,ls,pp,pr]=await Promise.all([api.oportunidades(),api.clientes(),api.faturamento(),api.metasDetalhe(+S.ano),api.running(),api.etapas(),api.gerentes(),api.listas(),api.papeis(),api.parametros()]);
+    aplicarEtapas(et);S.opps=o;S.clientes=c;S.fat=f;S.metasDoc=m;S.metas=m.valores;S.running=r;S.gerCad=gc;S.listas=ls;S.papeis=pp;S.param=pr;aplicarAcesso();mostrarNome();if(pode('ver_reuniao')||pode('registrar_acoes'))S.acoes=await api.acoes().catch(()=>[]);if(ADMIN)S.usuarios=await api.usuarios().catch(()=>[]);
     setStatus(o.length?'':'Ainda não há oportunidades. Use "Nova oportunidade" para registrar a primeira.');
     renderAll();
+    // foto semanal: o banco tira toda segunda (pg_cron); se ainda não houver a da semana, pede agora
+    api.tirarFoto().catch(()=>{}).then(()=>api.fotos(TODAY_ISO)).then(fs=>{S.fotos=fs;renderAll();}).catch(()=>{});
     let t;api.aoVivo(tab=>{clearTimeout(t);t=setTimeout(()=>recarregar(tab),300);});
   }catch(e){setStatus('Não foi possível carregar os dados: '+(e.message||e),true);$('#liveTxt').textContent='Sem conexão aos dados';}
 })();
