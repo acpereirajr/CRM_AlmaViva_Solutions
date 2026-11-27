@@ -105,6 +105,15 @@ const marcado=o=>!!ACESSO.team&&(o.team||[]).includes(ACESSO.team);
 const inSelO=o=>inSel(o.gerente)||(marcado(o)&&(!!GER_FIXO||ACESSO.escopo==='marcadas'||!filtrando()||S.sel.has(o.gerente)));
 const visivel=g=>ACESSO.escopo==='todos'||g===ACESSO.gerente||(ACESSO.escopo==='area'&&ACESSO.areas.includes(areaDe(g)));
 const usuarioAtual=()=>({...perfil,id:perfil.user_id});
+/* ================= celular: tabelas de dados viram cartões ================= */
+// Em telas estreitas, cada linha vira um cartão; o rótulo de cada valor vem do cabeçalho da coluna.
+const TABELAS_CARTAO=['tbOpp','tbCli','fDet','rank','rTab','rRisco','rDet','mOpps','tbUsuarios','tbPrev','tbTeam'];
+function rotularTabelas(){TABELAS_CARTAO.forEach(id=>{const t=document.getElementById(id);if(!t)return;
+  const ths=[...t.querySelectorAll('thead th')].map(th=>th.textContent.trim());if(!ths.length)return;
+  t.classList.add('cards');const sc=t.closest('.scroll');if(sc)sc.classList.add('cards-on');
+  t.querySelectorAll('tbody tr, tfoot tr').forEach(tr=>{let c=0;[...tr.children].forEach(td=>{const span=+td.getAttribute('colspan')||1,l=span>1?'':(ths[c]||'');
+    if(td.dataset.label!==l){td.dataset.label=l;td.classList.toggle('sem-rotulo',!l);}c+=span;});});});}
+let rotPend=false;new MutationObserver(()=>{if(rotPend)return;rotPend=true;requestAnimationFrame(()=>{rotPend=false;rotularTabelas();});}).observe(document.body,{childList:true,subtree:true});
 /* ================= utilidades ================= */
 const $=(s:string):any=>document.querySelector(s);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
