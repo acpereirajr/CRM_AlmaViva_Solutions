@@ -313,3 +313,7 @@ a.btn{display:inline-block;padding:8px 14px;border-radius:9px;font-weight:700;te
   table.cards td:first-child{font-size:15px}
   table.cards tfoot tr{border-width:2px}
 }
+
+/* valores por extenso em R$: os números grandes cabem na caixa */
+.kpi .v,.htile .v{white-space:nowrap;font-size:clamp(15px,1.42vw,26px);letter-spacing:-.02em}
+@media (max-width:640px){.kpi .v,.htile .v{font-size:23px}}

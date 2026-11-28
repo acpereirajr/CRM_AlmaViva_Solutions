@@ -119,9 +119,13 @@ const $=(s:string):any=>document.querySelector(s);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const sum=(a,f)=>a.reduce((s,x)=>s+(Number(f(x))||0),0);
 const nf=(v,d=0)=>(Number(v)||0).toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d});
-const brl=v=>'R$ '+nf(v);
-function M(v){v=Number(v)||0;const a=Math.abs(v),s=v<0?'-':'';
-  if(a>=1e9)return s+'R$ '+nf(a/1e9,2)+' bi'; if(a>=1e6)return s+'R$ '+nf(a/1e6,2)+' M'; if(a>=1e3)return s+'R$ '+nf(a/1e3,0)+' K'; return s+'R$ '+nf(a);}
+const brl=v=>{v=Number(v)||0;return (v<0?'-':'')+'R$ '+nf(Math.abs(v),2);};
+// campos de valor: digitação com máscara de moeda (os dígitos entram como centavos)
+const fmtMoeda=v=>nf(Number(v)||0,2);
+const lerMoeda=x=>{const v=Number(String(x??'').replace(/[^0-9,-]/g,'').replace(',','.'));return isFinite(v)?v:0;};
+const vM=sel=>lerMoeda((typeof sel==='string'?document.querySelector(sel):sel)?.value);
+document.addEventListener('input',e=>{const t=e.target;if(!t.classList||!t.classList.contains('moeda'))return;const d=t.value.replace(/\D/g,'').replace(/^0+(?=\d)/,'');t.value=d?fmtMoeda(Number(d)/100):'';},true);
+function M(v){return brl(v);}
 function Ms(v){v=Number(v)||0;const a=Math.abs(v); if(a>=1e9)return nf(v/1e9,1)+' bi'; if(a>=1e6)return nf(v/1e6,a>=1e8?0:a>=1e7?1:2)+' M'; if(a>=1e3)return nf(v/1e3,0)+' K'; return nf(v);}
 const pct=(a,b,d=1)=>b?nf(a/b*100,d)+'%':'—';
 const fmtD=d=>d?d.split('-').reverse().join('/'):'';
@@ -593,7 +597,7 @@ function gerCadForm(g){
       <label>Área<select id="g_area">${opts(areas,g.area||'','')}</select></label>
       <label>Território<select id="g_terr">${opts(terrs,g.territorio||'','')}</select></label>
       <label class="full">Diretor comercial<select id="g_dir">${opts(opcoes('diretor',g.diretor),g.diretor||'','')}</select><span class="note">Os nomes dos diretores ficam em Configurações > Listas de opções > Diretor comercial.</span></label>
-      <label>Meta ${esc(S.ano)} (R$)<input id="g_meta" type="number" min="0" step="100000" value="${esc(S.metas[g.nome]||0)}"></label>
+      <label>Meta ${esc(S.ano)} (R$)<input id="g_meta" class="moeda" inputmode="numeric" placeholder="0,00" value="${fmtMoeda(S.metas[g.nome]||0)}"></label>
       <label style="display:flex;gap:8px;align-items:center;flex-direction:row;align-self:end"><input type="checkbox" id="g_ativo" ${g.ativo!==false?'checked':''} style="width:auto"> Ativo</label>
       <div class="full note">A meta vale para o período cadastrado na aba Metas (${esc(fmtD(S.metasDoc.inicio)||'—')} a ${esc(fmtD(S.metasDoc.fim)||'—')}).</div>
       <div class="full err" id="g_err"></div>
@@ -603,7 +607,7 @@ function gerCadForm(g){
         const nome=$('#g_nome').value.trim(); if(!nome)return;
         if(isNew&&gerentesTodos().some(x=>x.toLowerCase()===nome.toLowerCase())&&S.gerCad.some(x=>x.nome.toLowerCase()===nome.toLowerCase())){$('#g_err').textContent='Esse gerente já está cadastrado.';return;}
         const data={nome,email:$('#g_email').value.trim(),area:$('#g_area').value.trim(),territorio:$('#g_terr').value.trim(),diretor:$('#g_dir').value||'',ativo:$('#g_ativo').checked};
-        const meta=Math.max(0,+$('#g_meta').value||0); const valores={...S.metas};
+        const meta=Math.max(0,+vM('#g_meta')||0); const valores={...S.metas};
         if(meta)valores[nome]=meta;else delete valores[nome];
         try{await api.salvarGerente(data,userId);
           if((S.metas[nome]||0)!==meta)await api.salvarMetas(+S.ano,S.metasDoc.inicio||null,S.metasDoc.fim||null,valores);
@@ -617,16 +621,16 @@ function renderMetasCfg(force){
   const gs=uniq([...gerentes(),...Object.keys(S.metas)]).filter(g=>!inativos().has(g));
   const ro=!ADMIN;
   $('#tbMetas').innerHTML=`<thead><tr><th>Gerente</th><th>Área</th><th>Território</th><th class="r">Meta (R$)</th></tr></thead><tbody>${
-    gs.map(g=>{const i=gerInfo(g);return `<tr><td class="w"><b>${esc(g)}</b></td><td>${esc(i.area||'—')}</td><td>${esc(i.territorio||'—')}</td><td class="r"><input class="mini" type="number" min="0" step="100000" data-meta="${esc(g)}" value="${esc(S.metas[g]||'')}" placeholder="0" ${ro?'disabled':''}></td></tr>`;}).join('')}</tbody>`;
+    gs.map(g=>{const i=gerInfo(g);return `<tr><td class="w"><b>${esc(g)}</b></td><td>${esc(i.area||'—')}</td><td>${esc(i.territorio||'—')}</td><td class="r"><input class="mini moeda" inputmode="numeric" data-meta="${esc(g)}" value="${S.metas[g]?fmtMoeda(S.metas[g]):''}" placeholder="0" ${ro?'disabled':''}></td></tr>`;}).join('')}</tbody>`;
   metaTot();
 }
-function metaTot(){$('#m_tot').textContent=brl(sum([...document.querySelectorAll('[data-meta]')],i=>+i.value||0));}
+function metaTot(){$('#m_tot').textContent=brl(sum([...document.querySelectorAll('[data-meta]')],i=>lerMoeda(i.value)));}
 $('#metaF').addEventListener('input',()=>{S.metaDirty=true;metaTot();});
 $('#m_reset').addEventListener('click',()=>renderMetasCfg(true));
 $('#metaF').addEventListener('submit',async ev=>{ev.preventDefault();if(!ADMIN)return;
   const ini=$('#m_ini').value,fim=$('#m_fim').value;
   if(ini&&fim&&fim<ini){$('#m_err').textContent='O fim do período precisa ser depois do início.';return;}
-  const valores={};document.querySelectorAll('[data-meta]').forEach(i=>{const v=+i.value||0;if(v)valores[i.dataset.meta]=v;});
+  const valores={};document.querySelectorAll('[data-meta]').forEach(i=>{const v=lerMoeda(i.value);if(v)valores[i.dataset.meta]=v;});
   Object.entries(S.metas).forEach(([g,v])=>{if(inativos().has(g))valores[g]=v;});
   try{await api.salvarMetas(+S.ano,ini||null,fim||null,valores);S.metaDirty=false;await recarregar('metas');$('#m_err').textContent='';toast('Metas salvas');}
   catch(err){writeErr(err,'#m_err');}});
@@ -775,7 +779,7 @@ const PARAM_DEF=[
   {k:'adiamentosMax',l:'Adiada (vezes)',s:'Selo "Adiada" quando a data de fechamento foi empurrada esse número de vezes.',step:1},
   {k:'diasEtapa',l:'Parada na etapa (dias, mínimo)',s:'Selo quando passa deste tempo na mesma etapa e também acima da média da etapa.',step:1},
   {k:'fatorMedia',l:'Acima da média da etapa (fator)',s:'1,5 = 50% acima do tempo médio das oportunidades na mesma etapa.',step:0.1},
-  {k:'valorAlto',l:'Valor alto (R$ no ano)',s:'Selo "Sem próximo passo" para oportunidades deste valor sem próximo passo nem ação aberta.',step:100000}];
+  {k:'valorAlto',moeda:true,l:'Valor alto (R$ no ano)',s:'Selo "Sem próximo passo" para oportunidades deste valor sem próximo passo nem ação aberta.',step:100000}];
 const param=()=>({...PARAM_PADRAO,...(S.param||{})});
 const catSugerida=o=>{const p=param(),pr=Number(o.probabilidade)||0;return pr>=p.commitProb?'Commit':pr>=p.bestProb?'Best case':'Pipeline';};
 const catDe=o=>o.status===WON?'Fechado':!OPEN.has(o.status)?null:(CATS.includes(o.categoria)?o.categoria:catSugerida(o));
@@ -1018,13 +1022,13 @@ $('#rAno').addEventListener('change',e=>{S.ano=e.target.value;$('#fAno').value=S
 let rTE;window.addEventListener('resize',()=>{clearTimeout(rTE);rTE=setTimeout(()=>{if(!ecP2)return;ecP2.then(ec=>document.querySelectorAll('.ec').forEach(el=>{const i=ec.getInstanceByDom(el);i&&i.resize();})).catch(()=>{});},200);});
 // ---- Configurações > Forecast e riscos ----
 function renderParamCfg(){const p=param(),ro=!ADMIN;
-  $('#parGrid').innerHTML=PARAM_DEF.map(d=>`<label class="field"><span>${esc(d.l)}</span><input type="number" min="0" step="${d.step}" id="par_${d.k}" value="${esc(p[d.k])}" ${ro?'disabled':''}><span class="note">${esc(d.s)}</span></label>`).join('');
+  $('#parGrid').innerHTML=PARAM_DEF.map(d=>`<label class="field"><span>${esc(d.l)}</span>${d.moeda?`<input class="moeda" inputmode="numeric" id="par_${d.k}" value="${fmtMoeda(p[d.k])}"`:`<input type="number" min="0" step="${d.step}" id="par_${d.k}" value="${esc(p[d.k])}"`} ${ro?'disabled':''}><span class="note">${esc(d.s)}</span></label>`).join('');
   $('#par_save').disabled=ro;$('#par_reset').disabled=ro;}
 $('#parF').addEventListener('submit',async e=>{e.preventDefault();if(!ADMIN)return;const v={};
-  for(const d of PARAM_DEF){const x=Number($('#par_'+d.k).value);if(!isFinite(x)||x<0){$('#par_err').textContent=`Valor inválido em "${d.l}".`;return;}v[d.k]=x;}
+  for(const d of PARAM_DEF){const x=d.moeda?vM('#par_'+d.k):Number($('#par_'+d.k).value);if(!isFinite(x)||x<0){$('#par_err').textContent=`Valor inválido em "${d.l}".`;return;}v[d.k]=x;}
   if(v.bestProb>v.commitProb){$('#par_err').textContent='A probabilidade de Best case não pode ser maior que a de Commit.';return;}
   try{await salvarParam(v);$('#par_err').textContent='';toast('Limites salvos');}catch(err){$('#par_err').textContent='Não foi possível salvar: '+(err&&err.message||'tente de novo.');}});
-$('#par_reset').addEventListener('click',()=>{PARAM_DEF.forEach(d=>{$('#par_'+d.k).value=PARAM_PADRAO[d.k];});});
+$('#par_reset').addEventListener('click',()=>{PARAM_DEF.forEach(d=>{$('#par_'+d.k).value=d.moeda?fmtMoeda(PARAM_PADRAO[d.k]):PARAM_PADRAO[d.k];});});
 
 /* ================= reunião de forecast ================= */
 const cssVar=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -1364,10 +1368,10 @@ function oppForm(o,preCli){
       <label>Origem da oportunidade<select id="o_orig" ${isNew?'required':''}>${opts(opcoes('origem',o.origemOpp),o.origemOpp||'','')}</select></label>
       <label id="o_odetL" hidden></label>
       <fieldset class="full team-box"><legend>Team members <span class="note">(especialistas e outras pessoas que trabalham na oportunidade além do gerente)</span></legend>${(t=>t.length?t.map(v=>`<label class="chk"><input type="checkbox" value="${esc(v)}" ${(o.team||[]).includes(v)?'checked':''} ${ro?'disabled':''}> ${esc(v)}</label>`).join(''):'<span class="note">Nenhum especialista cadastrado ainda. Quem tem acesso às Configurações cadastra em Configurações &gt; Team members.</span>')(uniq([...opcoes('team'),...(o.team||[])]))}</fieldset>
-      <label>Valor de serviço (R$)<input id="o_vs" type="number" min="0" step="1000" value="${esc(o.valorServico||0)}"></label>
-      <label>Valor de software (R$)<input id="o_vsw" type="number" min="0" step="1000" value="${esc(o.valorSoftware||0)}"></label>
-      <label>Faturamento de serviço no ano (R$)<input id="o_fs" type="number" min="0" step="1000" value="${esc(o.faturamentoServico||0)}"></label>
-      <label>Software no ano (R$)<input id="o_sa" type="number" min="0" step="1000" value="${esc(o.softwareAno||0)}"></label>
+      <label>Valor de serviço (R$)<input id="o_vs" class="moeda" inputmode="numeric" placeholder="0,00" value="${fmtMoeda(o.valorServico||0)}"></label>
+      <label>Valor de software (R$)<input id="o_vsw" class="moeda" inputmode="numeric" placeholder="0,00" value="${fmtMoeda(o.valorSoftware||0)}"></label>
+      <label>Faturamento de serviço no ano (R$)<input id="o_fs" class="moeda" inputmode="numeric" placeholder="0,00" value="${fmtMoeda(o.faturamentoServico||0)}"></label>
+      <label>Software no ano (R$)<input id="o_sa" class="moeda" inputmode="numeric" placeholder="0,00" value="${fmtMoeda(o.softwareAno||0)}"></label>
       <label>Cadastro<input id="o_cad" type="date" value="${esc(o.cadastro||'')}"></label>
       <label>Fechamento previsto<input id="o_fech" type="date" required value="${esc(o.fechamento||'')}"></label>
       <label class="full">Observações<textarea id="o_obs">${esc(o.observacoes||'')}</textarea></label>
@@ -1380,7 +1384,7 @@ function oppForm(o,preCli){
         if(ro&&$('#o_odet'))$('#o_odet').disabled=true;};
       $('#o_orig').addEventListener('change',odet);odet();
       const bc=d.querySelector('[data-copiar-num]');if(bc)bc.addEventListener('click',()=>copiar(bc.dataset.copiarNum,`Número ${bc.dataset.copiarNum} copiado`));
-      const tot=()=>{$('#o_total').textContent=`Valor total: ${brl((+$('#o_vs').value||0)+(+$('#o_vsw').value||0))} · Valor no ano (usado no forecast): ${brl((+$('#o_fs').value||0)+(+$('#o_sa').value||0))}`;};
+      const tot=()=>{$('#o_total').textContent=`Valor total: ${brl((vM('#o_vs')||0)+(vM('#o_vsw')||0))} · Valor no ano (usado no forecast): ${brl((vM('#o_fs')||0)+(vM('#o_sa')||0))}`;};
       ['#o_vs','#o_vsw','#o_fs','#o_sa'].forEach(s=>$(s).addEventListener('input',tot));tot();
       $('#o_status').addEventListener('change',e=>{$('#o_prob').value=ST[e.target.value]?.p??$('#o_prob').value;});
       const catNota=()=>{const st=$('#o_status').value,ab=OPEN.has(st);$('#o_cat').disabled=!ab||ro;
@@ -1391,7 +1395,7 @@ function oppForm(o,preCli){
         const nome=$('#o_cliente').value.trim();const c=S.clientes.find(x=>x.nome.toLowerCase()===nome.toLowerCase());
         const data={...o,titulo:$('#o_titulo').value.trim(),cliente:c?c.nome:nome,clienteId:c?c.id:slug(nome),gerente:$('#o_gerente').value,status:$('#o_status').value,
           probabilidade:Math.max(0,Math.min(100,+$('#o_prob').value||0)),area:$('#o_area').value,revenda:$('#o_rev').value||null,software:$('#o_soft').value||null,parceiro:$('#o_parc').value||null,origemOpp:$('#o_orig').value||null,team:[...document.querySelectorAll('.team-box input:checked')].map(i=>i.value),origemDet:(!$('#o_odetL').hidden&&$('#o_odet')?$('#o_odet').value.trim():'')||null,
-          valorServico:+$('#o_vs').value||0,valorSoftware:+$('#o_vsw').value||0,faturamentoServico:+$('#o_fs').value||0,softwareAno:+$('#o_sa').value||0,
+          valorServico:vM('#o_vs')||0,valorSoftware:vM('#o_vsw')||0,faturamentoServico:vM('#o_fs')||0,softwareAno:vM('#o_sa')||0,
           cadastro:$('#o_cad').value||null,fechamento:$('#o_fech').value||null,observacoes:$('#o_obs').value.trim(),atualizadoEm:new Date().toISOString(),
           categoria:OPEN.has($('#o_status').value)?($('#o_cat').value||null):null,proximoPasso:$('#o_pp').value.trim(),proximoPassoData:$('#o_ppd').value||null};
         data.valorTotal=data.valorServico+data.valorSoftware;
