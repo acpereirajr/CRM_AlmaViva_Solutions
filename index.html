@@ -269,7 +269,7 @@
       <div class="scroll"><table id="tbGer"></table></div>
     </div>
     <div id="cfg-metas" class="cfg-pane card" hidden>
-      <div class="card-head" style="margin:0"><div><h3>Metas</h3><div class="sub" id="metaFonte"></div></div></div>
+      <div class="card-head" style="margin:0;flex-wrap:wrap;gap:10px"><div><h3>Metas por ano</h3><div class="sub" id="metaFonte"></div></div><div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap"><label class="field"><span>Ano das metas</span><select id="m_ano"></select></label><button type="button" class="ghost" id="m_novo">Adicionar ano</button></div></div>
       <form id="metaF">
         <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin-top:12px">
           <label class="field"><span>Início do período</span><input type="date" id="m_ini"></label>
@@ -278,8 +278,9 @@
         </div>
         <div class="scroll" style="margin-top:14px"><table id="tbMetas"></table></div>
         <div class="err" id="m_err"></div>
-        <div class="actions"><button type="button" class="ghost" id="m_reset">Desfazer</button><button class="blue" id="m_save">Salvar metas</button></div>
+        <div class="actions"><button type="button" class="ghost" id="m_copiar">Copiar metas do ano anterior</button><button type="button" class="ghost" id="m_reset">Desfazer</button><button class="blue" id="m_save">Salvar metas</button></div>
       </form>
+      <div id="m_dir" style="margin-top:22px;border-top:1px solid var(--line,#e3e8ef);padding-top:16px"></div>
     </div>
     <div id="cfg-listas" class="cfg-pane" hidden>
       <p class="note" style="margin:0 0 10px">Opções dos campos de seleção. Opções desativadas somem dos formulários, mas continuam nos registros antigos. Uma opção em uso não pode ser excluída, só desativada.</p>

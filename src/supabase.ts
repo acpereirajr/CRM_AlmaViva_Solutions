@@ -264,6 +264,10 @@ export const api = {
       ativo: g.ativo !== false, atualizado_em: new Date().toISOString(), atualizado_por: userId ?? null });
     if (error) throw error;
   },
+  async anosMetas() {
+    const { data, error } = await sb.from('metas').select('ano'); if (error) throw error;
+    return [...new Set((data || []).map((r: any) => String(r.ano)))];
+  },
   async metasDetalhe(ano: number) {
     const { data, error } = await sb.from('metas').select('gerente,valor,inicio,fim').eq('ano', ano); if (error) throw error;
     const d = data || [];

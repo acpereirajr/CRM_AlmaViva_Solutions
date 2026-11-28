@@ -107,7 +107,7 @@ const visivel=g=>ACESSO.escopo==='todos'||g===ACESSO.gerente||(ACESSO.escopo==='
 const usuarioAtual=()=>({...perfil,id:perfil.user_id});
 /* ================= celular: tabelas de dados viram cartões ================= */
 // Em telas estreitas, cada linha vira um cartão; o rótulo de cada valor vem do cabeçalho da coluna.
-const TABELAS_CARTAO=['tbOpp','tbCli','fDet','rank','rTab','rRisco','rDet','mOpps','tbUsuarios','tbPrev','tbTeam'];
+const TABELAS_CARTAO=['tbMetaDir','tbOpp','tbCli','fDet','rank','rTab','rRisco','rDet','mOpps','tbUsuarios','tbPrev','tbTeam'];
 function rotularTabelas(){TABELAS_CARTAO.forEach(id=>{const t=document.getElementById(id);if(!t)return;
   const ths=[...t.querySelectorAll('thead th')].map(th=>th.textContent.trim());if(!ths.length)return;
   t.classList.add('cards');const sc=t.closest('.scroll');if(sc)sc.classList.add('cards-on');
@@ -599,7 +599,7 @@ function gerCadForm(g){
       <label class="full">Diretor comercial<select id="g_dir">${opts(opcoes('diretor',g.diretor),g.diretor||'','')}</select><span class="note">Os nomes dos diretores ficam em Configurações > Listas de opções > Diretor comercial.</span></label>
       <label>Meta ${esc(S.ano)} (R$)<input id="g_meta" class="moeda" inputmode="numeric" placeholder="0,00" value="${fmtMoeda(S.metas[g.nome]||0)}"></label>
       <label style="display:flex;gap:8px;align-items:center;flex-direction:row;align-self:end"><input type="checkbox" id="g_ativo" ${g.ativo!==false?'checked':''} style="width:auto"> Ativo</label>
-      <div class="full note">A meta vale para o período cadastrado na aba Metas (${esc(fmtD(S.metasDoc.inicio)||'—')} a ${esc(fmtD(S.metasDoc.fim)||'—')}).</div>
+      <div class="full note">Meta do ano ${esc(S.ano)} (troque o ano no filtro do painel ou em Configurações > Metas), no período cadastrado em Metas (${esc(fmtD(S.metasDoc.inicio)||'—')} a ${esc(fmtD(S.metasDoc.fim)||'—')}).</div>
       <div class="full err" id="g_err"></div>
       <div class="full actions"><button type="button" class="ghost" data-close>Cancelar</button><button class="blue" ${ADMIN?'':'disabled'}>${isNew?'Cadastrar':'Salvar'}</button></div>
     </form>`,()=>{
@@ -616,15 +616,34 @@ function gerCadForm(g){
 }
 function renderMetasCfg(force){
   if(S.metaDirty&&!force)return; S.metaDirty=false;
-  const d=S.metasDoc||{}; $('#m_ini').value=d.inicio||''; $('#m_fim').value=d.fim||'';
-  $('#metaFonte').textContent=`Metas de ${S.ano} (troque o ano no painel para editar outro). Gerentes inativos não aparecem aqui.${ADMIN?'':' Só administradores podem alterar.'}`;
+  const d=S.metasDoc||{}; $('#m_ini').value=d.inicio||S.ano+'-01-01'; $('#m_fim').value=d.fim||S.ano+'-12-31';
+  $('#metaFonte').textContent=`Metas de ${S.ano}: a meta é dada a cada gerente comercial; a do diretor é a soma da equipe. ${d.fonte?'Origem: '+d.fonte+'. ':''}Gerentes inativos não aparecem aqui.`;
+  $('#m_copiar').textContent=`Copiar metas de ${+S.ano-1}`;
   const gs=uniq([...gerentes(),...Object.keys(S.metas)]).filter(g=>!inativos().has(g));
-  const ro=!ADMIN;
+  const ro=!ADMIN;$('#m_novo').disabled=ro;$('#m_copiar').disabled=ro;
   $('#tbMetas').innerHTML=`<thead><tr><th>Gerente</th><th>Área</th><th>Território</th><th class="r">Meta (R$)</th></tr></thead><tbody>${
     gs.map(g=>{const i=gerInfo(g);return `<tr><td class="w"><b>${esc(g)}</b></td><td>${esc(i.area||'—')}</td><td>${esc(i.territorio||'—')}</td><td class="r"><input class="mini moeda" inputmode="numeric" data-meta="${esc(g)}" value="${S.metas[g]?fmtMoeda(S.metas[g]):''}" placeholder="0" ${ro?'disabled':''}></td></tr>`;}).join('')}</tbody>`;
   metaTot();
 }
-function metaTot(){$('#m_tot').textContent=brl(sum([...document.querySelectorAll('[data-meta]')],i=>lerMoeda(i.value)));}
+function metaTot(){const ins=[...document.querySelectorAll('[data-meta]')];$('#m_tot').textContent=brl(sum(ins,i=>lerMoeda(i.value)));
+  /* meta do diretor = soma das metas dos gerentes ligados a ele (Configurações > Gerentes) — calculada, nunca digitada */
+  const g={};ins.forEach(i=>{const d=diretorDe(i.dataset.meta),v=lerMoeda(i.value);g[d]=g[d]||{n:0,c:0,v:0,ns:[]};g[d].n++;g[d].v+=v;if(v){g[d].c++;g[d].ns.push(i.dataset.meta);}});
+  const ks=Object.keys(g).sort((a,b)=>(a==='Sem diretor')-(b==='Sem diretor')||a.localeCompare(b));
+  $('#m_dir').innerHTML=`<h3 style="margin:0">Meta dos diretores ${esc(S.ano)}</h3><div class="sub">Calculada automaticamente: soma das metas dos gerentes da equipe de cada diretor (o diretor de cada gerente fica em Configurações > Gerentes). Atualiza enquanto você digita.</div>
+    <div class="scroll" style="margin-top:10px"><table id="tbMetaDir"><thead><tr><th>Diretor</th><th class="r">Gerentes na equipe</th><th class="r">Com meta</th><th class="r">Meta do diretor (R$)</th></tr></thead><tbody>${
+    ks.map(d=>`<tr><td><b>${esc(d)}</b>${d==='Sem diretor'&&g[d].v?' <span class="note">(ligue estes gerentes a um diretor)</span>':''}</td><td class="r">${nf(g[d].n)}</td><td class="r">${nf(g[d].c)}</td><td class="r"><b>${esc(brl(g[d].v))}</b></td></tr>`).join('')||'<tr><td colspan="4" class="note">Nenhum gerente ativo.</td></tr>'}</tbody></table></div>`;
+  }
+/* ---- metas por ano: qualquer quantidade de anos; o ano das metas é o mesmo ano da visão ---- */
+function anosLista(){return uniq(['2026','2027',...(S.anosMetas||[]),...(S.anosExtra||[]),S.ano]).filter(Boolean).sort();}
+function encherAnos(){const a=anosLista();['#fAno','#m_ano'].forEach(id=>{const e=$(id);if(e)e.innerHTML=opts(a,S.ano);});}
+function mudarAno(a){S.ano=String(a);S.metaDirty=false;S.rel.det=null;encherAnos();recarregar('metas');renderAll();}
+const metasDoAno=a=>api.metasDetalhe(+a);
+$('#m_ano').addEventListener('change',e=>{if(S.metaDirty)toast('Alterações não salvas foram descartadas.');mudarAno(e.target.value);});
+$('#m_novo').addEventListener('click',()=>{const a=String(Math.max(...anosLista().map(Number))+1);S.anosExtra=uniq([...(S.anosExtra||[]),a]);mudarAno(a);toast(`Ano ${a} adicionado. Preencha as metas e salve.`);});
+$('#m_copiar').addEventListener('click',async()=>{const ant=String(+S.ano-1);
+  try{const v=(await metasDoAno(ant)).valores||{};if(!Object.keys(v).length){$('#m_err').textContent=`Não há metas cadastradas em ${ant}.`;return;}
+    document.querySelectorAll('[data-meta]').forEach(i=>{const x=v[i.dataset.meta];i.value=x?fmtMoeda(x):'';});S.metaDirty=true;metaTot();$('#m_err').textContent='';toast(`Metas de ${ant} copiadas. Revise e clique em Salvar metas.`);}
+  catch(err){$('#m_err').textContent='Não foi possível copiar: '+(err&&err.message||'');}});
 $('#metaF').addEventListener('input',()=>{S.metaDirty=true;metaTot();});
 $('#m_reset').addEventListener('click',()=>renderMetasCfg(true));
 $('#metaF').addEventListener('submit',async ev=>{ev.preventDefault();if(!ADMIN)return;
@@ -897,7 +916,7 @@ function grFcQuarter(el,Q,onClick){const T=ecTema();
 function setSeg(sel,v){document.querySelectorAll(sel+' button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v===v)));}
 function renderRelatorios(){
   const P=S.rel.per,D=S.rel.dim,dt=DIMS[D];
-  $('#rAno').innerHTML=opts(['2026','2027'],S.ano);setSeg('#rPer',P);setSeg('#rDim',D);$('#rBase').value=S.rel.base;
+  $('#rAno').innerHTML=opts(anosLista(),S.ano);setSeg('#rPer',P);setSeg('#rDim',D);$('#rBase').value=S.rel.base;
   $('#rDim').hidden=!!GER_FIXO;
   const gsv=filtrando()?gerSel():[];
   $('#rVisao').innerHTML=GER_FIXO?`Sua carteira: <b>${esc(GER_FIXO)}</b>.`:!filtrando()?'Todos os gerentes que você enxerga. Para filtrar, escolha áreas ou gerentes no <a href="#painel">Painel</a>.':`Seleção do Painel: ${S.areas.size?`áreas <b>${esc([...S.areas].join(', '))}</b>, `:''}<b>${gsv.length}</b> gerente${gsv.length===1?'':'s'}.`;
@@ -1018,7 +1037,7 @@ $('#rDim').addEventListener('click',e=>{const b=e.target.closest('[data-v]');if(
 $('#rEsc').addEventListener('click',e=>{const b=e.target.closest('[data-v]');if(!b)return;S.rel.esc=b.dataset.v;renderRelatorios();});
 $('#rBase').addEventListener('change',e=>{S.rel.base=e.target.value;renderCascata(S.rel.per);});
 $('#rExpTab').addEventListener('click',exportarTabela);$('#rExpOpp').addEventListener('click',exportarOpps);
-$('#rAno').addEventListener('change',e=>{S.ano=e.target.value;$('#fAno').value=S.ano;S.rel.det=null;renderAll();});
+$('#rAno').addEventListener('change',e=>mudarAno(e.target.value));
 let rTE;window.addEventListener('resize',()=>{clearTimeout(rTE);rTE=setTimeout(()=>{if(!ecP2)return;ecP2.then(ec=>document.querySelectorAll('.ec').forEach(el=>{const i=ec.getInstanceByDom(el);i&&i.resize();})).catch(()=>{});},200);});
 // ---- Configurações > Forecast e riscos ----
 function renderParamCfg(){const p=param(),ro=!ADMIN;
@@ -1046,7 +1065,7 @@ function formAcao(id){const pd=pode('registrar_acoes');const resp=uniq([...geren
     <datalist id="dlResp">${resp.map(r=>`<option value="${esc(r)}">`).join('')}</datalist></form>`:'<p class="note">Seu acesso permite ver, mas não registrar ações.</p>';}
 function renderReuniao(){
   const gs=reuGerentes(),g=reuGer();
-  $('#mGer').innerHTML=opts(gs,g);$('#mGer').disabled=!!GER_FIXO;$('#mAno').innerHTML=opts(['2026','2027'],S.ano);setSeg('#mModo',S.reu.modo);
+  $('#mGer').innerHTML=opts(gs,g);$('#mGer').disabled=!!GER_FIXO;$('#mAno').innerHTML=opts(anosLista(),S.ano);setSeg('#mModo',S.reu.modo);
   const fc=fcAno().filter(o=>o.gerente===g).sort((a,b)=>(a.fechamento||'').localeCompare(b.fechamento||''));
   const x=linhasFc('ano','ger').find(r=>r.k===g)||{k:g,meta:S.metas[g]||0,real:0,Commit:0,'Best case':0,Pipeline:0,aberto:0,pond:0,n:0,nc:0,riscos:0,vRisco:0,gap:S.metas[g]||0,prev:0,cob:null};
   const abertas=S.acoes.filter(a=>a.gerente===g&&a.status!=='concluida').length,venc=S.acoes.filter(a=>a.gerente===g&&a.status!=='concluida'&&a.prazo&&a.prazo<TODAY_ISO).length,ci=cobInfo(x);
@@ -1151,7 +1170,7 @@ async function renderGraficos3D(gs,g,fc){
 }
 let rT3;window.addEventListener('resize',()=>{clearTimeout(rT3);rT3=setTimeout(()=>{if(!ecP)return;ecP.then(ec=>['#m3dBar','#m3dOpp'].forEach(s=>{const i=ec.getInstanceByDom($(s));i&&i.resize();})).catch(()=>{});},200);});
 $('#mGer').addEventListener('change',e=>{S.reu.ger=e.target.value;renderReuniao();});
-$('#mAno').addEventListener('change',e=>{S.ano=e.target.value;$('#fAno').value=S.ano;renderAll();});
+$('#mAno').addEventListener('change',e=>mudarAno(e.target.value));
 function acoesOppForm(o){
   openDrawer(`<div class="card-head" style="margin:0"><div><span class="eyebrow">Ações da oportunidade</span><h2 style="font-size:20px">Nº ${esc(o.numero)} · ${esc(o.cliente)}</h2></div><button class="ghost" data-close>Fechar</button></div>
     <dl class="facts"><dt>Oportunidade</dt><dd>${esc(o.titulo)}</dd><dt>Gerente</dt><dd>${esc(o.gerente)}</dd><dt>Etapa</dt><dd>${esc(o.status)} · ${esc(o.probabilidade)}%</dd><dt>Valor no ano</dt><dd>${esc(brl(vAno(o)))}</dd><dt>Fechamento</dt><dd>${esc(fmtD(o.fechamento)||'—')}</dd></dl>
@@ -1317,6 +1336,7 @@ async function salvarPrevendas(l){await api.salvarPrevendas(l);S.prevendas=await
 /* ================= roteamento ================= */
 const cur=()=>{const h=location.hash.slice(1);return VIEWS.includes(h)?h:(VIEWS[0]||null);};
 function renderAll(){
+  encherAnos();
   aplicarAcesso();
   const v=cur(); TODAS_VIEWS.forEach(n=>{$('#v-'+n).hidden=n!==v;}); $('#hero').hidden=v!=='painel';
   $('#semAcesso').hidden=!!v; if(!v)return;
@@ -1325,8 +1345,8 @@ function renderAll(){
   ({painel:renderPainel,oportunidades:renderOpps,clientes:renderClientes,faturamento:renderFat,relatorios:renderRelatorios,reuniao:renderReuniao,config:renderConfig})[v]();
 }
 window.addEventListener('hashchange',()=>{renderAll();window.scrollTo(0,0);});
-$('#fAno').addEventListener('change',e=>{S.ano=e.target.value;S.metaDirty=false;renderAll();recarregar('metas');});
-$('#btnLimpar').addEventListener('click',()=>{S.sel.clear();S.areas.clear();if(GER_FIXO)S.sel.add(GER_FIXO);S.ano='2026';$('#fAno').value='2026';S.p={cli:'',fab:'',area:'',res:'gp'};renderAll();});
+$('#fAno').addEventListener('change',e=>mudarAno(e.target.value));
+$('#btnLimpar').addEventListener('click',()=>{S.sel.clear();S.areas.clear();if(GER_FIXO)S.sel.add(GER_FIXO);S.p={cli:'',fab:'',area:'',res:'gp'};mudarAno('2026');});
 [['#pCli','cli'],['#pFab','fab'],['#pArea','area'],['#pRes','res']].forEach(([id,k])=>$(id).addEventListener('change',e=>{S.p[k]=e.target.value;renderPipeline(base());}));
 $('#btnLimparP').addEventListener('click',()=>{S.p={cli:'',fab:'',area:'',res:'gp'};renderPipeline(base());});
 $('#simR').addEventListener('input',e=>{S.sim.pct=+e.target.value;renderSim(base());});
@@ -1466,7 +1486,7 @@ async function recarregar(qual?:string){
     if(!qual||qual==='fotos_pipeline')S.fotos=await api.fotos(TODAY_ISO);
     if((!qual||qual==='acoes')&&(pode('ver_reuniao')||pode('registrar_acoes'))){S.acoes=await api.acoes();aposAcoes();}
     if(ADMIN&&(!qual||qual==='usuarios'||qual==='perfis'||qual==='convites'))S.usuarios=await api.usuarios();
-    if(!qual||qual==='metas'){S.metasDoc=await api.metasDetalhe(+S.ano);S.metas=S.metasDoc.valores;}
+    if(!qual||qual==='metas'){S.metasDoc=await api.metasDetalhe(+S.ano);S.metas=S.metasDoc.valores;S.anosMetas=await api.anosMetas().catch(()=>S.anosMetas||[]);}
     renderAll();
   }catch(e){setStatus('Não foi possível atualizar os dados: '+(e.message||e),true);}
 }
@@ -1476,7 +1496,7 @@ renderAll();
 (async()=>{
   try{
     const [o,c,f,m,r,et,gc,ls,pp,pr,pv]=await Promise.all([api.oportunidades(),api.clientes(),api.faturamento(),api.metasDetalhe(+S.ano),api.running(),api.etapas(),api.gerentes(),api.listas(),api.papeis(),api.parametros(),api.prevendas()]);
-    aplicarEtapas(et);S.opps=o;S.clientes=c;S.fat=f;S.metasDoc=m;S.metas=m.valores;S.running=r;S.gerCad=gc;S.listas=ls;S.papeis=pp;S.param=pr;S.prevendas=pv;aplicarAcesso();mostrarNome();if(pode('ver_reuniao')||pode('registrar_acoes'))S.acoes=await api.acoes().catch(()=>[]);if(ADMIN)S.usuarios=await api.usuarios().catch(()=>[]);
+    aplicarEtapas(et);S.opps=o;S.clientes=c;S.fat=f;S.metasDoc=m;S.metas=m.valores;api.anosMetas().then(a=>{S.anosMetas=a;encherAnos();}).catch(()=>{});S.running=r;S.gerCad=gc;S.listas=ls;S.papeis=pp;S.param=pr;S.prevendas=pv;aplicarAcesso();mostrarNome();if(pode('ver_reuniao')||pode('registrar_acoes'))S.acoes=await api.acoes().catch(()=>[]);if(ADMIN)S.usuarios=await api.usuarios().catch(()=>[]);
     setStatus(o.length?'':'Ainda não há oportunidades. Use "Nova oportunidade" para registrar a primeira.');
     renderAll();
     // foto semanal: o banco tira toda segunda (pg_cron); se ainda não houver a da semana, pede agora
