@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Viva 360 Comercial</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700;6..12,800;6..12,900&display=swap">
+</head>
+<body>
+<div id="login" class="login wrap" hidden>
+  <form id="loginF">
+    <div><div class="eyebrow">Viva 360 Comercial</div><h1>Entrar no CRM</h1><div class="sub">Use o e-mail cadastrado pela administração.</div></div>
+    <label>E-mail<input id="lEmail" type="email" autocomplete="username" required></label>
+    <label>Senha<input id="lSenha" type="password" autocomplete="current-password"></label>
+    <div class="err" id="lErr"></div>
+    <button class="blue" type="submit">Entrar</button>
+    <button class="ghost" type="button" id="lMagico">Receber link de acesso por e-mail</button>
+  </form>
+</div>
+<div id="app" hidden>
+<header>
+  <div class="wrap top">
+    <div class="brand">Viva 360 <span>Comercial</span></div>
+    <nav id="nav">
+      <a href="#painel">Painel</a>
+      <a href="#oportunidades">Oportunidades</a>
+      <a href="#clientes">Clientes</a>
+      <a href="#faturamento">Faturamento</a>
+      <a href="#relatorios">Relatórios</a>
+      <a href="#reuniao">Reunião de forecast</a>
+      <a href="#config">Configurações</a>
+    </nav>
+    <div class="spacer"></div>
+    <div class="status-dot"><i></i><span id="liveTxt">Dados ao vivo</span></div>
+    <div class="user"><span id="userNome"></span><button class="ghost" id="btnSair" type="button">Sair</button></div>
+  </div>
+</header>
+
+<section class="hero" id="hero">
+  <div class="wrap hero-in">
+    <div>
+      <h1 id="hName">Comercial Almaviva</h1>
+      <p class="lead" id="hLead">Faturamento, pipeline e desempenho da equipe</p>
+      <span class="pill-hero" id="hPill">Ano de 2026</span>
+      <div class="hero-tiles">
+        <div class="htile"><div class="l">Realizado</div><div class="v num" id="hReal">—</div></div>
+        <div class="htile"><div class="l">Forecast previsto</div><div class="v num" id="hFc">—</div></div>
+        <div class="htile"><div class="l">Projeção</div><div class="v num" id="hProj">—</div></div>
+      </div>
+    </div>
+    <div>
+      <div class="rings" id="hRings"></div>
+      <div class="ring-cap" id="hCap"></div>
+    </div>
+  </div>
+</section>
+
+<main class="wrap">
+  <div id="semAcesso" class="banner warn" hidden>Seu usuário não tem acesso a nenhuma tela do CRM. Fale com a administração.</div>
+  <div id="status" class="banner" style="margin-top:18px">Carregando oportunidades e clientes…</div>
+
+  <!-- PAINEL -->
+  <section class="view" id="v-painel" style="margin-top:18px">
+    <div class="card filters-card">
+      <div><h3>Composição da visão comercial</h3><div class="sub">Escolha o ano, as áreas e os gerentes. O painel e a lista de oportunidades seguem essa seleção.</div></div>
+      <label class="field"><span>Ano da visão</span><select id="fAno"><option>2026</option><option>2027</option></select></label>
+      <div class="field" id="fAreaBox"><span>Áreas</span><div class="ms" id="msArea"></div></div>
+      <div class="field"><span>Gerentes de contas</span><div class="ms" id="msGer"></div><small id="gerHint"></small></div>
+      <div class="field"><span>Filtros</span><button class="dark" id="btnLimpar">Limpar filtros</button></div>
+    </div>
+
+    <div class="card accent">
+      <div class="card-head"><div><h2 style="font-size:24px">Meta anual e cobertura comercial</h2><div class="sub">Comparação entre resultado, Forecast previsto e Running previsto</div></div><span class="tag" id="covTag" style="background:var(--navy);color:#fff;padding:7px 14px"></span></div>
+      <div class="grid g5" id="metaCards"></div>
+    </div>
+
+    <div class="card">
+      <h3>Insights sobre a meta</h3><div class="sub">Leitura executiva do realizado e do potencial futuro</div>
+      <div class="grid g5" id="insights" style="margin-top:12px"></div>
+    </div>
+
+    <div class="grid g2">
+      <div class="card"><h3>Faturamento por gerente</h3><div class="sub">Comparação do realizado entre os responsáveis</div><div id="barReal" style="margin-top:10px"></div></div>
+      <div class="card"><h3>Potencial comercial por gerente</h3><div class="sub">Realizado mais Forecast previsto, comparado à meta</div><div id="barPot" style="margin-top:10px"></div></div>
+    </div>
+
+    <div class="card accent">
+      <div class="card-head"><div><h3>Trajetória de atingimento</h3><div class="sub">Evolução acumulada por trimestre: meta, realizado e projeção comercial</div></div>
+        <div class="legend"><span><i style="background:var(--c3)"></i>Meta acumulada</span><span><i style="background:var(--green)"></i>Projeção combinada</span><span><i style="background:color-mix(in srgb,var(--green) 35%,transparent)"></i>Faixa realizado → projeção</span></div></div>
+      <div id="chTraj"></div>
+      <div class="grid g3" id="trajCards" style="margin-top:12px"></div>
+      <div class="howto"><span><b>Como ler:</b> a área colorida é o potencial que ainda depende das oportunidades em aberto.</span><span id="trajFoot"></span></div>
+    </div>
+
+    <div class="sec-head"><span class="eyebrow">Visão comercial futura</span><h2>Pipeline</h2><span class="sub">Valores ganhos e oportunidades futuras por cliente, fabricante e área.</span></div>
+    <div class="card">
+      <div class="grid g5">
+        <label class="field"><span>Cliente</span><select id="pCli"></select></label>
+        <label class="field"><span>Fabricante</span><select id="pFab"></select></label>
+        <label class="field"><span>Área de negócio</span><select id="pArea"></select></label>
+        <label class="field"><span>Resultado</span><select id="pRes"><option value="gp">Ganhos e previsões</option><option value="p">Somente previsões</option><option value="g">Somente ganhos</option></select></label>
+        <div class="field"><span>&nbsp;</span><button class="dark" id="btnLimparP">Limpar pipeline</button></div>
+      </div>
+      <div class="note" id="pInfo" style="margin-top:10px"></div>
+    </div>
+    <div class="grid g4" id="pKpis"></div>
+    <div class="card">
+      <div class="card-head"><div><h3>Funil de vendas</h3><div class="sub">Distribuição atual das oportunidades com fechamento no ano</div></div><span class="tag" id="funTag"></span></div>
+      <div class="funnel" id="funnel"></div>
+      <div class="howto"><span><b>Valor considerado:</b> faturamento de serviço no ano + software no ano.</span><span>Fotografia atual do pipeline, não conversão histórica entre etapas.</span></div>
+    </div>
+
+    <div class="sec-head"><span class="eyebrow">Inteligência executiva</span><h2>Meta, composição e risco</h2><span class="sub">Leituras integradas do realizado e do pipeline conforme os filtros.</span></div>
+    <div class="grid g2">
+      <div class="card"><h3>Bullet de atingimento</h3><div class="sub">Realizado e previsões em relação à meta</div><div id="bullet" style="margin-top:12px"></div></div>
+      <div class="card"><h3>Waterfall da meta</h3><div class="sub">Contribuição de cada componente para a projeção final</div><div id="waterfall" style="margin-top:6px"></div></div>
+    </div>
+    <div class="card"><h3>Heatmap trimestre × etapa</h3><div class="sub">Concentração por etapa e trimestre de fechamento no ano</div><div class="scroll" style="margin-top:10px"><table class="heat" id="heat"></table></div></div>
+
+    <div class="card accent">
+      <div class="card-head"><div><span class="eyebrow">Decisão orientada por dados</span><h2 style="font-size:24px">Central de Inteligência Comercial</h2><div class="sub">Leitura automática de risco, confiança e prioridade conforme os filtros.</div></div><span class="tag win">● Atualizada pelos filtros</span></div>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr))">
+        <div class="card" style="box-shadow:none"><span class="eyebrow" style="color:var(--muted)">1 · Diagnóstico executivo automático</span><h3 id="diagT" style="font-size:19px;margin-top:6px"></h3><p class="note" id="diagP" style="font-size:13px"></p></div>
+        <div class="card" style="box-shadow:none"><span class="eyebrow" style="color:var(--muted)">2 · Confiança do forecast</span><div style="display:flex;gap:14px;align-items:center;margin-top:8px"><div id="confRing"></div><div><h3 id="confT"></h3><p class="note" id="confP" style="margin:4px 0 0"></p></div></div></div>
+        <div class="card" style="box-shadow:none"><span class="eyebrow" style="color:var(--muted)">Sinais da seleção</span><div class="grid" style="gap:6px;margin-top:8px" id="signals"></div></div>
+      </div>
+      <div class="grid g2" style="margin-top:14px">
+        <div class="card" style="box-shadow:none"><div class="card-head"><div><h3>3 · Alertas comerciais</h3><div class="sub">Riscos que pedem ação</div></div><span class="tag" id="alCount"></span></div><div class="grid" style="gap:8px" id="alerts"></div></div>
+        <div class="card" style="box-shadow:none"><div class="card-head"><div><h3>4 · Recomendações por gerente</h3><div class="sub">Próxima melhor ação por carteira</div></div></div><div class="grid" style="gap:8px" id="recs"></div></div>
+      </div>
+      <div class="card" style="box-shadow:none;margin-top:14px"><h3>5 · Ranking de prioridades</h3><div class="sub">Valor, prazo e maturidade combinados em um score</div><div class="scroll" style="margin-top:10px"><table id="rank"></table></div></div>
+      <div class="card" style="box-shadow:none;margin-top:14px">
+        <h3>6 · Simulador de cenários</h3><div class="sub">Converta uma parcela do forecast e veja o impacto na meta</div>
+        <div class="grid g2" style="margin-top:12px;align-items:start">
+          <div>
+            <div class="field"><span>Cenário rápido</span><div class="toolbar" id="simPresets">
+              <button class="chip" data-p="35">Conservador · 35%</button><button class="chip" data-p="60">Provável · 60%</button><button class="chip" data-p="85">Otimista · 85%</button></div></div>
+            <div style="display:flex;gap:12px;align-items:center;margin-top:14px"><input type="range" id="simR" min="0" max="100" step="5" value="60" aria-label="Conversão do forecast"><b id="simV" style="color:var(--c1);font-size:18px;min-width:52px">60%</b></div>
+            <label class="note" style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="simEx" style="width:auto"> Excluir oportunidades com fechamento vencido</label>
+          </div>
+          <div><div class="sim-out" id="simOut"></div><div class="sim-text" id="simTxt"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid g21">
+      <div class="card"><div class="card-head"><div><h3>Calendário do pipeline</h3><div class="sub">Ganhos e previsões com fechamento no ano</div></div><div class="legend"><span><i style="background:var(--c1)"></i>Ganho</span><span><i style="background:var(--c2)"></i>Previsão</span></div></div><div id="cal"></div></div>
+      <div class="card"><h3>Forecast previsto por cliente</h3><div class="sub">Somente oportunidades em aberto</div><div id="fcCli" style="margin-top:10px"></div><div class="note" id="fcCliNote" style="margin-top:6px"></div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><div><h3>Evolução por data de cadastro</h3><div class="sub">Valor e quantidade de oportunidades cadastradas ao longo do tempo</div></div>
+        <label class="field" style="min-width:220px"><span>Fabricante</span><select id="evFab"></select></label></div>
+      <div class="grid g4" id="evKpis" style="margin-bottom:12px"></div>
+      <div class="legend" style="justify-content:flex-end;margin-bottom:4px"><span><i style="background:var(--c1)"></i>Valor cadastrado</span><span><i style="background:var(--purple)"></i>Quantidade</span></div>
+      <div id="chEv"></div>
+    </div>
+  </section>
+
+  <!-- OPORTUNIDADES -->
+  <section class="view" id="v-oportunidades" hidden style="margin-top:22px">
+    <div class="card-head" style="margin:0"><div><span class="eyebrow">Cadastro comercial</span><h2>Oportunidades</h2></div><button class="blue" id="btnNovaOpp">Nova oportunidade</button></div>
+    <div class="banner" id="oppVisao" style="margin-top:12px"></div>
+    <div class="card toolbar">
+      <input type="search" id="qOpp" placeholder="Buscar cliente, oportunidade, fabricante ou número">
+      <select id="fStatus"><option value="abertas">Em aberto</option><option value="ganhas">Ganhas</option><option value="">Todas</option></select>
+      <select id="fTeam" aria-label="Team member" hidden></select>
+      <span class="note" id="oppCount"></span>
+    </div>
+    <div class="card" style="padding:0"><div class="scroll" style="max-height:70vh"><table id="tbOpp"></table></div></div>
+  </section>
+
+  <!-- CLIENTES -->
+  <section class="view" id="v-clientes" hidden style="margin-top:22px">
+    <div class="card-head" style="margin:0"><div><span class="eyebrow">Carteira</span><h2>Clientes</h2></div><button class="blue" id="btnNovoCli">Novo cliente</button></div>
+    <div class="card toolbar"><input type="search" id="qCli" placeholder="Buscar cliente"><select id="fGerC"></select><span class="note" id="cliCount"></span></div>
+    <div class="card" style="padding:0"><div class="scroll" style="max-height:70vh"><table id="tbCli"></table></div></div>
+  </section>
+
+  <!-- FATURAMENTO -->
+  <section class="view" id="v-faturamento" hidden style="margin-top:22px">
+    <div class="sec-head" style="margin:0"><h2>Faturamento</h2><span class="sub">Lançamentos da aba Consolidado atribuídos aos gerentes selecionados no painel.</span></div>
+    <div class="card"><div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+      <label class="field"><span>Busca</span><input type="search" id="fq" placeholder="Cliente, projeto, contrato, NF"></label>
+      <label class="field"><span>Período</span><select id="fper"></select></label>
+      <label class="field"><span>Gerente</span><select id="fger"></select></label>
+      <label class="field"><span>Cliente</span><select id="fcli"></select></label>
+      <label class="field"><span>Tecnologia</span><select id="ftec"></select></label>
+      <label class="field"><span>Tipo</span><select id="ftip"></select></label>
+      <label class="field"><span>Unidade de negócio</span><select id="fbu"></select></label>
+      <label class="field"><span>Território</span><select id="fter"></select></label>
+      <label class="field"><span>Status da NF</span><select id="fst"></select></label>
+      <div class="field"><span>&nbsp;</span><button class="dark" id="fLimpar">Limpar</button></div>
+    </div></div>
+    <div class="grid g5" id="fKpis"></div>
+    <div class="grid g2">
+      <div class="card"><div class="card-head"><div><h3>Evolução mensal</h3><div class="sub">Faturamento por mês de emissão</div></div></div><div id="fMes"></div></div>
+      <div class="card"><h3>Faturamento por cliente</h3><div class="sub">Participação e concentração da carteira</div><div id="fCliBars" style="margin-top:10px"></div></div>
+      <div class="card"><h3>Mix de tecnologias</h3><div class="sub">Composição do faturamento</div><div id="fTec" style="margin-top:10px"></div></div>
+      <div class="card"><h3>Unidades de negócio</h3><div class="sub">Distribuição por BU responsável</div><div id="fBu" style="margin-top:10px"></div></div>
+    </div>
+    <div class="card"><h3>Leitura executiva</h3><div class="sub">Destaques recalculados conforme os filtros</div><div class="grid g3" id="fRead" style="margin-top:12px"></div></div>
+    <div class="card" style="padding:0">
+      <div style="padding:18px 18px 8px"><h3>Detalhamento dos lançamentos</h3><div class="sub" id="fDetInfo"></div></div>
+      <div class="scroll"><table id="fDet"></table></div>
+      <div class="pager"><span id="fPgInfo"></span><span class="toolbar"><button id="fPrev">Anterior</button><button id="fNext">Próxima</button></span></div>
+    </div>
+    <p class="note" style="text-align:right">Fonte: FATURAMENTOS_2026.xlsx, aba Consolidado. Lançamentos cancelados e sem valor ficam de fora.</p>
+  </section>
+  <!-- RELATÓRIOS -->
+  <section class="view" id="v-relatorios" hidden style="margin-top:22px">
+    <div class="card-head" style="margin:0;flex-wrap:wrap;gap:10px"><div><span class="eyebrow">Forecast</span><h2>Relatórios</h2></div>
+      <div class="toolbar"><label class="note">Ano <select id="rAno"></select></label>
+        <div class="seg" id="rPer" role="group" aria-label="Período"><button data-v="ano">Ano</button><button data-v="0">Q1</button><button data-v="1">Q2</button><button data-v="2">Q3</button><button data-v="3">Q4</button></div>
+        <div class="seg" id="rDim" role="group" aria-label="Visão"><button data-v="ger">Gerente</button><button data-v="dir">Diretor</button><button data-v="area">Área</button><button data-v="fab">Fabricante</button><button data-v="orig">Origem</button></div></div></div>
+    <div class="banner" id="rVisao" style="margin-top:12px"></div>
+    <div class="grid g4" id="rKpis"></div>
+    <div class="card"><div class="card-head" style="margin:0"><div><h3 id="rMetaTit"></h3><div class="sub">Realizado (notas emitidas) + Commit + Best case + Pipeline contra a meta (marca vermelha). Clique numa barra para ver as oportunidades.</div></div><div class="seg" id="rEsc" role="group" aria-label="Escala"><button data-v="valor">R$</button><button data-v="pct">% da meta</button></div></div><div id="rChMeta" class="ec"></div></div>
+    <div class="grid g2">
+      <div class="card"><h3>Previsão por quarter</h3><div class="sub" id="rQSub"></div><div id="rChQ" class="ec" style="height:330px"></div></div>
+      <div class="card"><h3>Pipeline por etapa</h3><div class="sub">Valor no ano e valor ponderado pela probabilidade da etapa. Embaixo do nome: probabilidade e quantidade.</div><div id="rChEt" class="ec" style="height:330px"></div></div>
+    </div>
+    <div class="card"><h3>Origem das oportunidades</h3><div class="sub" id="rOrigSub"></div><div class="grid g2" style="margin-top:8px"><div><div class="mini-tit">Pipeline aberto por origem</div><div id="rChOrA" class="ec" style="height:260px"></div></div><div><div class="mini-tit">Ganhas e perdidas por origem</div><div class="note">Valor no ano; no fim da barra, a taxa de conversão em quantidade.</div><div id="rChOrB" class="ec" style="height:260px"></div></div></div></div>
+    <div class="card" style="padding:0"><div class="card-head" style="padding:18px 18px 0"><div><h3 id="rTabTit"></h3><div class="sub" id="rTabSub"></div></div><button class="ghost" id="rExpTab">Exportar planilha</button></div><div class="scroll"><table id="rTab" class="rel"></table></div></div>
+    <div class="card"><h3 id="rCobQTit"></h3><div class="sub">Pipeline aberto do quarter ÷ o que falta da meta do quarter (¼ da meta anual). Quarter encerrado mostra quanto da meta foi atingido. Clique numa célula para ver as oportunidades.</div><div id="rCobQ" style="margin-top:10px"></div></div>
+    <div class="card"><div class="card-head"><div><h3>O que mudou no pipeline</h3><div class="sub" id="rCasSub"></div></div><label class="note">Comparar com <select id="rBase"><option value="semana">a foto da semana passada</option><option value="4sem">a foto de 4 semanas atrás</option><option value="inicio">a primeira foto</option></select></label></div><div id="rCas"></div></div>
+    <div class="card" style="padding:0"><div class="card-head" style="padding:18px 18px 0"><div><h3 id="rRiscoTit"></h3><div class="sub" id="rRiscoSub"></div></div><button class="ghost" id="rExpOpp">Exportar oportunidades</button></div><div class="scroll" style="max-height:60vh"><table id="rRisco"></table></div></div>
+    <div class="card" id="rDetCard" hidden style="padding:0"><div class="card-head" style="padding:18px 18px 0"><h3 id="rDetTit"></h3><button class="ghost" id="rDetFechar">Fechar</button></div><div class="scroll"><table id="rDet"></table></div></div>
+  </section>
+
+  <!-- REUNIÃO DE FORECAST -->
+  <section class="view" id="v-reuniao" hidden style="margin-top:22px">
+    <div class="card-head" style="margin:0;flex-wrap:wrap;gap:10px"><div><span class="eyebrow">Reunião de forecast</span><h2 id="mTit">Reunião de forecast</h2></div>
+      <div class="toolbar"><label class="note">Gerente <select id="mGer"></select></label><label class="note">Ano <select id="mAno"></select></label>
+        <div class="seg" id="mModo" role="group" aria-label="Gráficos"><button data-v="2d">2D</button><button data-v="3d">3D</button></div></div></div>
+    <div class="grid g5" id="mKpis" style="margin-top:12px"></div>
+    <div class="card pauta"><div class="card-head"><div><span class="eyebrow">Pauta automática</span><h3 id="mPautaTit">Pauta da reunião</h3><div class="sub">Montada com os dados do gerente: o que fecha no quarter, o que está em risco, o que mudou desde a última foto e o que ficou combinado.</div></div><button class="ghost" id="mCopiar">Copiar pauta</button></div><div class="grid g4" id="mPauta"></div></div>
+    <div class="grid g2">
+      <div class="card"><h3 id="mChATit"></h3><div class="sub" id="mChASub"></div><div id="m3dBar" class="ec" style="height:420px"></div></div>
+      <div class="card"><h3 id="mChBTit"></h3><div class="sub" id="mChBSub"></div><div id="m3dOpp" class="ec" style="height:420px"></div></div>
+    </div>
+    <div class="grid g2">
+      <div class="card"><h3>Ações do gerente</h3><div class="sub">Combinados com o gerente que não são de uma oportunidade específica.</div><ul class="acoes" id="mAcGer"></ul><div id="mAcGerForm"></div></div>
+      <div class="card"><h3>Ações nas oportunidades</h3><div class="sub">Tudo o que foi registrado nas oportunidades deste gerente.</div><ul class="acoes" id="mAcOpp"></ul></div>
+    </div>
+    <div class="card" style="padding:0"><div style="padding:18px 18px 8px"><h3 id="mOppTit"></h3><div class="sub">Fechamentos em vermelho já venceram. Use "Ações" para registrar o combinado na reunião.</div></div><div class="scroll" style="max-height:60vh"><table id="mOpps"></table></div></div>
+  </section>
+
+  <!-- CONFIGURAÇÕES -->
+  <section class="view" id="v-config" hidden style="margin-top:22px">
+    <div class="sec-head" style="margin:0"><h2>Configurações</h2><span class="sub">Etapas do funil, gerentes de negócios, metas e as opções de cada campo de seleção. As mudanças valem na hora para todo o CRM.</span></div>
+    <div class="tabs-cfg" id="cfgTabs" role="tablist">
+      <button data-cfg="etapas" role="tab">Etapas das oportunidades</button>
+      <button data-cfg="gerentes" role="tab">Gerentes de negócios</button>
+      <button data-cfg="metas" role="tab">Metas</button>
+      <button data-cfg="listas" role="tab">Listas de opções</button>
+      <button data-cfg="forecast" role="tab">Forecast e riscos</button>
+      <button data-cfg="prevendas" role="tab">Pré-vendas</button>
+      <button data-cfg="team" role="tab">Team members</button>
+      <button data-cfg="acessos" role="tab">Usuários e acessos</button>
+    </div>
+    <div id="cfg-etapas" class="cfg-pane card" style="padding:0">
+      <div class="card-head" style="padding:18px 18px 0"><div><h3>Etapas das oportunidades</h3><div class="sub">A ordem define o funil. "Em aberto" entra no forecast, "Ganha" entra no pipeline ganho, "Perdida" sai dos dois.</div></div><button class="blue" id="btnNovaEtapa">Nova etapa</button></div>
+      <div class="scroll"><table id="tbEtapas"></table></div>
+    </div>
+    <div id="cfg-gerentes" class="cfg-pane card" style="padding:0" hidden>
+      <div class="card-head" style="padding:18px 18px 0"><div><h3>Gerentes de negócios</h3><div class="sub">Área, território e meta de cada gerente. Gerentes inativos saem da seleção do painel e dos formulários.</div></div><button class="blue" id="btnNovoGer">Novo gerente</button></div>
+      <div class="scroll"><table id="tbGer"></table></div>
+    </div>
+    <div id="cfg-metas" class="cfg-pane card" hidden>
+      <div class="card-head" style="margin:0;flex-wrap:wrap;gap:10px"><div><h3>Metas por ano</h3><div class="sub" id="metaFonte"></div></div><div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap"><label class="field"><span>Ano das metas</span><select id="m_ano"></select></label><button type="button" class="ghost" id="m_novo">Adicionar ano</button></div></div>
+      <form id="metaF">
+        <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin-top:12px">
+          <label class="field"><span>Início do período</span><input type="date" id="m_ini"></label>
+          <label class="field"><span>Fim do período</span><input type="date" id="m_fim"></label>
+          <div class="field"><span>Meta total</span><b id="m_tot" style="font-size:20px"></b></div>
+        </div>
+        <div class="scroll" style="margin-top:14px"><table id="tbMetas"></table></div>
+        <div class="err" id="m_err"></div>
+        <div class="actions"><button type="button" class="ghost" id="m_copiar">Copiar metas do ano anterior</button><button type="button" class="ghost" id="m_reset">Desfazer</button><button class="blue" id="m_save">Salvar metas</button></div>
+      </form>
+      <div id="m_dir" style="margin-top:22px;border-top:1px solid var(--line,#e3e8ef);padding-top:16px"></div>
+    </div>
+    <div id="cfg-listas" class="cfg-pane" hidden>
+      <p class="note" style="margin:0 0 10px">Opções dos campos de seleção. Opções desativadas somem dos formulários, mas continuam nos registros antigos. Uma opção em uso não pode ser excluída, só desativada.</p>
+      <div class="grid listas-grid" id="listasGrid"></div>
+    </div>
+    <div id="cfg-forecast" class="cfg-pane card" hidden>
+      <div class="card-head" style="margin:0"><div><h3>Forecast e riscos</h3><div class="sub">Limites da categoria sugerida, da cobertura de pipeline e dos selos de risco. Valem para todo o CRM.</div></div></div>
+      <form id="parF"><div id="parGrid"></div><div class="err" id="par_err"></div>
+        <div class="actions"><button type="button" class="ghost" id="par_reset">Voltar ao padrão</button><button class="blue" id="par_save">Salvar limites</button></div></form>
+    </div>
+    <div id="cfg-prevendas" class="cfg-pane card" style="padding:0" hidden>
+      <div class="card-head" style="padding:18px 18px 0"><div><h3>Pré-vendas</h3><div class="sub">Quem pode receber oportunidades enviadas de dentro do CRM. Inativos saem da lista de envio, mas o histórico fica.</div></div><button class="blue" id="btnNovoPrev">Nova pessoa</button></div>
+      <div class="scroll"><table id="tbPrev"></table></div>
+    </div>
+    <div id="cfg-team" class="cfg-pane card" style="padding:0" hidden>
+      <div class="card-head" style="padding:18px 18px 0"><div><h3>Team members</h3><div class="sub">Especialistas e outras pessoas que podem ser indicadas nas oportunidades, além do gerente. Inativos saem da lista para novas indicações, mas continuam nas oportunidades em que já estão.</div></div><button class="blue" id="btnNovoTeam">Novo team member</button></div>
+      <div class="scroll"><table id="tbTeam"></table></div>
+    </div>
+    <div id="cfg-acessos" class="cfg-pane" hidden>
+      <div class="card" style="padding:0">
+        <div class="card-head" style="padding:18px 18px 0"><div><h3>Tipos de usuário</h3><div class="sub">O que cada tipo pode ver e fazer. Vale para todos os usuários do tipo, menos as exceções cadastradas no usuário.</div></div><button class="blue" id="btnNovoTipo">Novo tipo</button></div>
+        <div class="scroll"><table id="tbPapeis" class="perm-mat"></table></div>
+      </div>
+      <div class="card" style="padding:0;margin-top:16px">
+        <div class="card-head" style="padding:18px 18px 0"><div><h3>Usuários</h3><div class="sub">Quem acessa o CRM, com qual tipo, qual gerente representa e quais exceções tem.</div></div><button class="blue" id="btnNovoUsr">Novo usuário</button></div>
+        <div class="scroll"><table id="tbUsuarios"></table></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="drawerRoot"></div>
+</div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
