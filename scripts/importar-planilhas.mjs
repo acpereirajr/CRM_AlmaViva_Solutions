@@ -7,7 +7,7 @@
 // - Faturamento: lê só a aba "Consolidado". Substitui todos os lançamentos (exceto cancelados e sem valor).
 // - Oportunidades: lê a primeira aba do export. Insere ou atualiza pelo "Nro Opp".
 // - Clientes: criados a partir das oportunidades e do faturamento (não apaga os cadastrados no CRM).
-// - Metas: arquivo JSON { "ano": 2026, "inicio": "2026-01-01", "fim": "2027-12-31", "valores": { "Gerente": 80000000 } }.
+// - Metas: arquivo JSON { "ano": 2026, "inicio": "2026-01-01", "fim": "2026-12-31", "valores": { "Gerente": 80000000 } }.
 //
 // Precisa de VITE_SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY no .env (a chave service role ignora o RLS:
 // use só na sua máquina, nunca no app nem no Vercel).
